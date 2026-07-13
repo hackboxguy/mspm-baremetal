@@ -1,21 +1,23 @@
 # MSPM bare-metal platform
 #
 # Usage:
-#   make BOARD=lp_mspm0c1106 APP=blink
+#   make BOARD=lp_mspm0c1106 APP=blink DEBUG=off
 #   make BOARD=lp_mspm0c1106 APP=blink DEBUG=on VERSION=01.02
 
 BOARD ?= lp_mspm0c1106
 APP ?= blink
-DEBUG ?= off
 VERSION ?= 00.00
 OPENOCD ?= openocd
 GDB ?= arm-none-eabi-gdb
 
-# Some developer shells export DEBUG=release.  Only the documented make
-# command-line setting participates in this project configuration.
+# DEBUG changes the output variant; accepting an exported value silently can
+# build an unexpected image. Set it explicitly on the make command line.
+ifneq ($(origin DEBUG),undefined)
 ifneq ($(origin DEBUG),command line)
-DEBUG := off
+$(error DEBUG from the environment is not accepted; pass DEBUG=on or DEBUG=off on the make command line)
 endif
+endif
+DEBUG ?= off
 
 PROJ_ROOT := $(abspath .)
 

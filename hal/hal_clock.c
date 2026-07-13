@@ -22,13 +22,14 @@ static void hal_clock_select_sysosc_div1(void) {
     __ISB();
 }
 
-static bool hal_clock_set_sysosc_frequency(uint32_t frequency) {
+static bool hal_clock_set_sysosc_frequency(uint32_t config_frequency,
+                                           uint32_t status_frequency) {
     uint32_t sysosc_config;
     uint32_t attempts;
 
     sysosc_config = SYSCTL->SOCLOCK.SYSOSCCFG;
     sysosc_config &= ~SYSCTL_SYSOSCCFG_FREQ_MASK;
-    sysosc_config |= frequency;
+    sysosc_config |= config_frequency;
     SYSCTL->SOCLOCK.SYSOSCCFG = sysosc_config;
     __DSB();
     __ISB();
@@ -36,7 +37,7 @@ static bool hal_clock_set_sysosc_frequency(uint32_t frequency) {
     for (attempts = 0U; attempts < HAL_CLOCK_STATUS_POLLS; ++attempts) {
         const uint32_t status = SYSCTL->SOCLOCK.CLKSTATUS;
         const bool sysosc_ready =
-            (status & SYSCTL_CLKSTATUS_SYSOSCFREQ_MASK) == frequency;
+            (status & SYSCTL_CLKSTATUS_SYSOSCFREQ_MASK) == status_frequency;
         const bool sysosc_selected =
             (status &
              (SYSCTL_CLKSTATUS_HSCLKMUX_MASK | SYSCTL_CLKSTATUS_CURMCLKSEL_MASK)) == 0U;
@@ -53,13 +54,15 @@ bool hal_clock_init(uint32_t requested_hz) {
     hal_clock_select_sysosc_div1();
 
     if ((requested_hz == HAL_CLOCK_MSPM0C1106_MAX_HZ) &&
-        hal_clock_set_sysosc_frequency(SYSCTL_SYSOSCCFG_FREQ_SYSOSCBASE)) {
+        hal_clock_set_sysosc_frequency(SYSCTL_SYSOSCCFG_FREQ_SYSOSCBASE,
+                                       SYSCTL_CLKSTATUS_SYSOSCFREQ_SYSOSC32M)) {
         g_mclk_hz = HAL_CLOCK_MSPM0C1106_MAX_HZ;
         return true;
     }
 
     /* Safe fallback: SYSOSC base is unavailable or the request was invalid. */
-    (void)hal_clock_set_sysosc_frequency(SYSCTL_SYSOSCCFG_FREQ_SYSOSC4M);
+    (void)hal_clock_set_sysosc_frequency(SYSCTL_SYSOSCCFG_FREQ_SYSOSC4M,
+                                         SYSCTL_CLKSTATUS_SYSOSCFREQ_SYSOSC4M);
     g_mclk_hz = HAL_CLOCK_SAFE_HZ;
     return false;
 }

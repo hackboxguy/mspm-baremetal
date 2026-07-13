@@ -5,24 +5,48 @@ on:
   pull_request:
 
 jobs:
-  phase0:
+  mspm0c1106:
     runs-on: ubuntu-24.04
     env:
       CI: true
+      ARM_GNU_TOOLCHAIN_ARCHIVE: arm-gnu-toolchain-13.2.rel1-x86_64-arm-none-eabi.tar.xz
+      ARM_GNU_TOOLCHAIN_SHA256: 6cd1bbc1d9ae57312bcd169ae283153a9572bd6a8e4eeae2fedfbc33b115fdbb
+      ARM_GNU_TOOLCHAIN_URL: https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-x86_64-arm-none-eabi.tar.xz
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install toolchain and checks
-        run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi clang-format
+      - name: Install pinned Arm GNU Toolchain and checks
+        run: |
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/$ARM_GNU_TOOLCHAIN_ARCHIVE" "$ARM_GNU_TOOLCHAIN_URL"
+          echo "$ARM_GNU_TOOLCHAIN_SHA256  $RUNNER_TEMP/$ARM_GNU_TOOLCHAIN_ARCHIVE" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/arm-gnu-toolchain"
+          tar -xJf "$RUNNER_TEMP/$ARM_GNU_TOOLCHAIN_ARCHIVE" --strip-components=1 -C "$RUNNER_TEMP/arm-gnu-toolchain"
+          echo "$RUNNER_TEMP/arm-gnu-toolchain/bin" >> "$GITHUB_PATH"
+          sudo apt-get update
+          sudo apt-get install -y clang-format
 
-      - name: Build release placeholder
+      - name: Build release blink
         run: make BOARD=lp_mspm0c1106 APP=blink DEBUG=off
 
-      - name: Build debug placeholder
+      - name: Build debug blink
         run: make BOARD=lp_mspm0c1106 APP=blink DEBUG=on VERSION=01.02
+      - name: Build debug fault-record test
+        run: make BOARD=lp_mspm0c1106 APP=fault_record_test DEBUG=on VERSION=01.02
+      - name: Build release fault-record test
+        run: make BOARD=lp_mspm0c1106 APP=fault_record_test DEBUG=off VERSION=01.02
+
+      - name: Report release size
+        run: make BOARD=lp_mspm0c1106 APP=blink DEBUG=off size
 
       - name: Run host tests
-        run: make test
+        run: make DEBUG=off test
 
       - name: Check formatting
-        run: make format-check
+        run: make DEBUG=off format-check
+
+      - name: Archive firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mspm0c1106-blink-artifacts
+          path: output/lp_mspm0c1106/blink/
+          if-no-files-found: error

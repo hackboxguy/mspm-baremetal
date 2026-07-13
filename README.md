@@ -10,7 +10,12 @@ Phase 0 is complete and Phase 1 bring-up is under way. `blink` configures the
 LaunchPad's red LED (`PA0`) and uses a SysTick 1 ms timebase to toggle it every
 500 ms. A MAIN-only OpenOCD program-and-verify cycle, reset, SWD liveness
 check, and visible blink have been bench-verified on an LP-MSPM0C1106. See the
-[bring-up record](docs/bringup_lp_mspm0c1106.md).
+[bring-up record](docs/bringup_lp_mspm0c1106.md). The portable SPSC ring buffer,
+UART0 TX, and compile-out `lib_debug` transport layer are complete; the
+115200-baud backchannel debug-banner test has passed. UART burst and overflow
+evidence is the next transport bench gate. WWDT0 reset and retained
+reset-cause capture are also bench-verified, including a deliberate HardFault;
+power-cycle retention remains to be checked.
 
 ## Prerequisites
 
@@ -22,17 +27,19 @@ check, and visible blink have been bench-verified on an LP-MSPM0C1106. See the
 ## Build and test
 
 ```sh
-make BOARD=lp_mspm0c1106 APP=blink
+make BOARD=lp_mspm0c1106 APP=blink DEBUG=off
 make BOARD=lp_mspm0c1106 APP=blink DEBUG=on VERSION=01.02
-make test
-make format-check
-make BOARD=lp_mspm0c1106 APP=blink size
-make OPENOCD=/path/to/openocd BOARD=lp_mspm0c1106 APP=blink flash
+make DEBUG=off test
+make DEBUG=off format-check
+make BOARD=lp_mspm0c1106 APP=blink DEBUG=off size
+make OPENOCD=/path/to/openocd BOARD=lp_mspm0c1106 APP=blink DEBUG=off flash
 ```
 
 Artifacts are written to `output/<board>/<app>/<variant>/` as ELF, BIN, HEX,
 and map files.  See [the accepted implementation plan](docs/mspm-mcu-code-base-plan.md),
 [device facts](docs/device_facts.md), and [vendored-header provenance](ti/README.md).
+`make clean` removes the selected board/application/variant output; use
+`make clean-all` to remove every generated output tree.
 
 ## Board programming and debug
 

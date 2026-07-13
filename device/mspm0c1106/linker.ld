@@ -46,6 +46,7 @@ SECTIONS
         __data_end = .;
     } > SRAM AT > FLASH
     __data_load_start = LOADADDR(.data);
+    __data_load_end = LOADADDR(.data) + SIZEOF(.data);
 
     .bss (NOLOAD) :
     {
@@ -82,6 +83,8 @@ SECTIONS
 
 ASSERT((LOADADDR(.data) + SIZEOF(.data)) <= __image_identity_start,
        "Flash image overlaps the reserved image identity block")
+ASSERT(ADDR(.isr_vector) == ORIGIN(FLASH),
+       "Vector table must start at the beginning of MAIN flash")
 ASSERT(__noinit_end <= __stack_limit, "SRAM image overlaps the reserved stack")
 ASSERT(__heap_start == __heap_end, "Dynamic heap is forbidden")
 ASSERT(SIZEOF(.image_identity) == IMAGE_ID_SIZE,

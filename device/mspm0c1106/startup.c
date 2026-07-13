@@ -1,6 +1,7 @@
 #include <stdint.h>
 
 #include "device.h"
+#include "lib_crash.h"
 
 typedef void (*isr_handler_t)(void);
 
@@ -13,27 +14,57 @@ extern uint8_t __bss_end;
 
 extern int main(void);
 
-void Default_Handler(void);
+lib_crash_record_t g_crash_record __attribute__((section(".noinit"), used, aligned(4)));
+
+void Default_Handler(void) __attribute__((naked));
 void Reset_Handler(void);
-void NMI_Handler(void) __attribute__((weak, alias("Default_Handler")));
-void HardFault_Handler(void) __attribute__((weak, alias("Default_Handler")));
+void NMI_Handler(void) __attribute__((naked, noreturn));
+void HardFault_Handler(void) __attribute__((naked, noreturn));
 void SVC_Handler(void) __attribute__((weak, alias("Default_Handler")));
 void PendSV_Handler(void) __attribute__((weak, alias("Default_Handler")));
 void SysTick_Handler(void) __attribute__((weak, alias("Default_Handler")));
 
 #define VECTOR(handler) ((uintptr_t)(handler))
-#define EXTERNAL_DEFAULT_VECTORS                                                       \
-    VECTOR(Default_Handler), VECTOR(Default_Handler), VECTOR(Default_Handler),         \
+#define WEAK_DEFAULT_HANDLER(handler)                                                  \
+    void handler(void) __attribute__((weak, alias("Default_Handler")));
+
+WEAK_DEFAULT_HANDLER(SYSCTL_IRQHandler)
+WEAK_DEFAULT_HANDLER(DEBUGSS_IRQHandler)
+WEAK_DEFAULT_HANDLER(TIMG8_IRQHandler)
+WEAK_DEFAULT_HANDLER(UART1_IRQHandler)
+WEAK_DEFAULT_HANDLER(ADC0_IRQHandler)
+WEAK_DEFAULT_HANDLER(COMP0_IRQHandler)
+WEAK_DEFAULT_HANDLER(UART2_IRQHandler)
+WEAK_DEFAULT_HANDLER(SPI0_IRQHandler)
+WEAK_DEFAULT_HANDLER(UART0_IRQHandler)
+WEAK_DEFAULT_HANDLER(TIMG14_IRQHandler)
+WEAK_DEFAULT_HANDLER(TIMG2_IRQHandler)
+WEAK_DEFAULT_HANDLER(TIMA0_IRQHandler)
+WEAK_DEFAULT_HANDLER(TIMG1_IRQHandler)
+WEAK_DEFAULT_HANDLER(GPIOA_IRQHandler)
+WEAK_DEFAULT_HANDLER(GPIOB_IRQHandler)
+WEAK_DEFAULT_HANDLER(I2C0_IRQHandler)
+WEAK_DEFAULT_HANDLER(I2C1_IRQHandler)
+WEAK_DEFAULT_HANDLER(FLASHCTL_IRQHandler)
+WEAK_DEFAULT_HANDLER(WWDT0_IRQHandler)
+/* LFSS_INT_IRQn and RTC_B_INT_IRQn share external vector slot 30. */
+WEAK_DEFAULT_HANDLER(LFSS_IRQHandler)
+WEAK_DEFAULT_HANDLER(DMA_IRQHandler)
+
+#undef WEAK_DEFAULT_HANDLER
+
+#define EXTERNAL_VECTORS                                                               \
+    VECTOR(SYSCTL_IRQHandler), VECTOR(DEBUGSS_IRQHandler), VECTOR(TIMG8_IRQHandler),   \
+        VECTOR(UART1_IRQHandler), VECTOR(ADC0_IRQHandler), VECTOR(Default_Handler),    \
+        VECTOR(Default_Handler), VECTOR(COMP0_IRQHandler), VECTOR(UART2_IRQHandler),   \
+        VECTOR(SPI0_IRQHandler), VECTOR(Default_Handler), VECTOR(Default_Handler),     \
         VECTOR(Default_Handler), VECTOR(Default_Handler), VECTOR(Default_Handler),     \
-        VECTOR(Default_Handler), VECTOR(Default_Handler), VECTOR(Default_Handler),     \
-        VECTOR(Default_Handler), VECTOR(Default_Handler), VECTOR(Default_Handler),     \
-        VECTOR(Default_Handler), VECTOR(Default_Handler), VECTOR(Default_Handler),     \
-        VECTOR(Default_Handler), VECTOR(Default_Handler), VECTOR(Default_Handler),     \
-        VECTOR(Default_Handler), VECTOR(Default_Handler), VECTOR(Default_Handler),     \
-        VECTOR(Default_Handler), VECTOR(Default_Handler), VECTOR(Default_Handler),     \
-        VECTOR(Default_Handler), VECTOR(Default_Handler), VECTOR(Default_Handler),     \
-        VECTOR(Default_Handler), VECTOR(Default_Handler), VECTOR(Default_Handler),     \
-        VECTOR(Default_Handler), VECTOR(Default_Handler)
+        VECTOR(UART0_IRQHandler), VECTOR(TIMG14_IRQHandler), VECTOR(TIMG2_IRQHandler), \
+        VECTOR(TIMA0_IRQHandler), VECTOR(TIMG1_IRQHandler), VECTOR(Default_Handler),   \
+        VECTOR(Default_Handler), VECTOR(GPIOA_IRQHandler), VECTOR(GPIOB_IRQHandler),   \
+        VECTOR(I2C0_IRQHandler), VECTOR(I2C1_IRQHandler), VECTOR(Default_Handler),     \
+        VECTOR(FLASHCTL_IRQHandler), VECTOR(Default_Handler),                          \
+        VECTOR(WWDT0_IRQHandler), VECTOR(LFSS_IRQHandler), VECTOR(DMA_IRQHandler)
 
 __attribute__((section(".isr_vector"), used, aligned(256)))
 const uintptr_t g_vector_table[] = {
@@ -53,21 +84,51 @@ const uintptr_t g_vector_table[] = {
     0U,
     VECTOR(PendSV_Handler),
     VECTOR(SysTick_Handler),
-    EXTERNAL_DEFAULT_VECTORS,
+    EXTERNAL_VECTORS,
 };
 
 _Static_assert((sizeof(g_vector_table) / sizeof(g_vector_table[0])) == 48U,
                "MSPM0C1106 has 32 external interrupt vector slots");
 
-void Default_Handler(void) {
+__attribute__((noreturn)) void crash_capture_from_stack(const uint32_t *stack_frame,
+                                                        uint32_t reason) {
+    const uint32_t stacked_pc = stack_frame[6];
+    const uint32_t stacked_xpsr = stack_frame[7];
+
+    lib_crash_capture(&g_crash_record, (lib_crash_reason_t)reason, stacked_pc,
+                      stacked_xpsr);
+    __DSB();
+    NVIC_SystemReset();
     for (;;) {
         __WFI();
     }
 }
 
+void NMI_Handler(void) {
+    __asm volatile("mrs r0, msp\n"
+                   "movs r1, #1\n"
+                   "b crash_capture_from_stack\n");
+}
+
+void HardFault_Handler(void) {
+    __asm volatile("mrs r0, msp\n"
+                   "movs r1, #2\n"
+                   "b crash_capture_from_stack\n");
+}
+
+void Default_Handler(void) {
+    __asm volatile("mrs r0, msp\n"
+                   "movs r1, #3\n"
+                   "b crash_capture_from_stack\n");
+}
+
 void Reset_Handler(void) {
     uint8_t *source;
     uint8_t *destination;
+    const uint32_t reset_cause = SYSCTL->SOCLOCK.RSTCAUSE & SYSCTL_RSTCAUSE_ID_MASK;
+
+    /* RSTCAUSE is read-to-clear, so preserve it before any other C startup. */
+    lib_crash_note_boot(&g_crash_record, reset_cause);
 
     source = &__data_load_start;
     destination = &__data_start;

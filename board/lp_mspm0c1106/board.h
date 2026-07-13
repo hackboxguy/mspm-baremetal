@@ -16,10 +16,21 @@
 /* SYSOSC base frequency and the user-visible blink cadence. */
 #define BOARD_MCLK_HZ UINT32_C(32000000)
 #define BOARD_BLINK_PERIOD_MS UINT32_C(500)
+#define BOARD_BLINK_FALLBACK_PERIOD_MS UINT32_C(125)
+#define BOARD_UART_BACKCHANNEL_BAUD UINT32_C(115200)
 
-/* Returns false only when the requested run clock fell back to safe 4 MHz. */
-bool board_init(void);
+typedef enum {
+    BOARD_INIT_OK,
+    BOARD_INIT_CLOCK_FALLBACK,
+    BOARD_INIT_GPIO_FAILURE,
+    BOARD_INIT_UART_FAILURE,
+} board_init_result_t;
+
+/* Initializes the run clock and red LED GPIO, reporting either degraded path. */
+board_init_result_t board_init(void);
 void board_led_red_set(bool on);
 void board_led_red_toggle(void);
+uint32_t board_uart_backchannel_dropped_count(void);
+bool board_crash_has_fault(void);
 
 #endif

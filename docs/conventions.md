@@ -10,24 +10,50 @@
   HAL configuration/handles, never copied board-specific drivers.
 - Dynamic allocation and `printf` are forbidden.  The linker script exposes a
   zero-sized heap; future debug output goes through `lib_debug` and UART TX.
+- Update `CLAUDE.md` in the same commit as any implemented phase-gate or
+  supported-workflow change. It is an operational status document, not a
+  historical proposal.
 
 ## Startup and memory
 
 - `startup.c` and `linker.ld` are owned code.  `.data` is copied, `.bss` is
   zeroed, and `.noinit` is not touched unless the verified reset/ECC policy
   deliberately invalidates it.
-- The raw reset cause is captured before documented clear semantics and is
-  retained for later diagnostics.
-- The fixed flash image-identity block is reserved now.  Phase 1 patches the
-  ELF first, then derives matching HEX and BIN artifacts.
+- `Reset_Handler` reads the read-to-clear raw reset cause before normal C
+  initialization and commits it to the CRC-protected `.noinit` crash record.
+  The record is never trusted until its magic, format, size, and CRC validate.
+  Fault capture commits the magic word last, then requests a system reset.
+- The fixed flash image-identity block is reserved now. **Target state —
+  pending Phase 1 identity work:** patch the ELF first, then derive matching
+  HEX and BIN artifacts. The future identity CRC covers defined content from
+  `ORIGIN(FLASH)` through `__data_load_end`, plus the identity block, with the
+  CRC field treated as zero. It excludes the erased gap between those ranges.
+  The BIN serialises that gap as `0xFF`, matching erased MAIN flash; an
+  ELF-programmed target does not write the gap.
 
 ## Interrupts and concurrency
 
-- Cortex-M0+ has four priority levels: 0 is highest and 3 is lowest.  The
-  Phase 1 blink image enables only SysTick, at priority 3.  No other exception
-  or peripheral interrupt may pre-empt it yet, and no SPSC pair exists in this
-  image.  Before enabling a further interrupt, document its priority, nesting
-  relationship, and every producer/consumer pair here.
+- Cortex-M0+ has four priority levels: 0 is highest and 3 is lowest. The
+  Phase 1 blink image uses UART0 at priority 2 and SysTick at priority 3.
+  UART0 can pre-empt SysTick; SysTick cannot pre-empt UART0. The UART0 TX SPSC
+  producer is the main thread and its consumer is the priority-2 UART0 ISR.
+  No other exception or peripheral interrupt is enabled. Before enabling a
+  further interrupt, document its priority, nesting relationship, and every
+  producer/consumer pair here.
+- `lib_ringbuf` is a fixed-storage, byte-oriented SPSC primitive. Its capacity
+  is a non-zero power of two; it uses every slot and monotonically advancing
+  32-bit masked indices. The producer exclusively calls `try_push` and owns
+  overflow accounting; the consumer exclusively calls `try_pop`. Its compiler
+  fences are sufficient only for one Cortex-M core and its interrupts, not DMA
+  or multi-core sharing. A diagnostic may read a stale dropped-count snapshot.
+- `lib_debug` is the only application/driver debug-output path. It is
+  register-free and delegates to a board-installed byte-writer callback. Use
+  `DBG_WRITE_LITERAL` or `DBG_WRITE_BYTES`; both compile to no runtime work in
+  release builds. The LP-MSPM0C1106 board installs its UART0 TX writer only in
+  debug builds.
+- WWDT0 is owned by `hal_wdt`. It has a 1-second LFCLK period, no closed
+  servicing window, runs while the core uses WFI, and stops while SWD halts the
+  core. The main-loop health path—not an ISR—services it.
 - ISR work is bounded.  Register-map page execution context is decided before
   the Phase 2 `lib_regmap` API freezes; command work normally belongs in the
   main loop.
@@ -38,3 +64,6 @@
   BCR/NONMAIN/BSL configuration needs a dedicated production-security plan.
 - Every hardware constant in owned code must trace to `docs/device_facts.md`
   and its primary source or bench record.
+- Before the fault recorder is implemented, `Default_Handler` is a WFI loop.
+  A frozen LED can therefore indicate an exception rather than a healthy idle
+  loop; use the documented SWD procedure to distinguish them.

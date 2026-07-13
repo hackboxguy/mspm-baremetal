@@ -45,9 +45,19 @@ arm-none-eabi-gdb output/lp_mspm0c1106/blink/release/lp_mspm0c1106_blink.elf \
   -ex 'target extended-remote :3333'
 ```
 
-On WSL2, a USB-attached XDS110 can appear as a root-owned device node. For a
-temporary single-session workaround, grant the current user read/write access
-to that node after every board reattachment:
+On native Linux, install [`99-xds110.rules`](99-xds110.rules) once, add the
+developer account to `plugdev`, then replug the board or reload udev rules:
+
+```sh
+sudo install -m 0644 tools/99-xds110.rules /etc/udev/rules.d/99-xds110.rules
+sudo usermod -aG plugdev "$USER"
+sudo udevadm control --reload-rules
+```
+
+On WSL2, udev may not manage USBIP-attached devices. A USB-attached XDS110 can
+therefore appear as a root-owned device node. For a temporary single-session
+workaround, grant the current user read/write access to that node after every
+board reattachment:
 
 ```sh
 sudo chmod a+rw /dev/bus/usb/001/002

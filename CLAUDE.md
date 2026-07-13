@@ -1,16 +1,25 @@
 # Project context
 
 This is a C11, GNU Make, bare-metal platform for TI MSPM0 and MSPM33 MCUs.
-The current implementation is Phase 0 and supports a link-complete
-`lp_mspm0c1106` / `blink` placeholder only; it is not ready to flash.
+Phase 0 is complete; Phase 1 MSPM0C1106 bring-up is under way. The
+`lp_mspm0c1106` / `blink` release image has passed a MAIN-only OpenOCD
+program-and-verify cycle and visibly blinks the board's PA0 red LED. See
+`docs/bringup_lp_mspm0c1106.md` for the precise tested setup and remaining
+Phase 1 evidence. The portable `lib_ringbuf` SPSC primitive, UART0 TX, and
+compile-out `lib_debug` transport layer are complete. The 115200-baud
+backchannel debug-banner test is recorded; UART burst and overflow evidence is
+the next transport bench gate. WWDT0 reset and reset-cause retention are
+bench-proven; deliberate HardFault capture is also proven. Power-cycle
+retention remains.
 
 ## Commands
 
 ```sh
-make BOARD=lp_mspm0c1106 APP=blink
+make BOARD=lp_mspm0c1106 APP=blink DEBUG=off
 make BOARD=lp_mspm0c1106 APP=blink DEBUG=on VERSION=01.02
-make test
-make format-check
+make DEBUG=off test
+make DEBUG=off format-check
+make OPENOCD=/path/to/openocd BOARD=lp_mspm0c1106 APP=blink DEBUG=off flash
 ```
 
 ## Non-negotiable rules

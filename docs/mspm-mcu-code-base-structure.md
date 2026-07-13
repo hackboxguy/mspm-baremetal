@@ -200,14 +200,14 @@ Shared code assumes ARMv6-M: no FPU, no hardware divide (beware `/` and `%` in h
 ### 5.4 Build UX (kept deliberately identical to RH850)
 
 ```bash
-make BOARD=lp_mspm0c1106 APP=blink
+make BOARD=lp_mspm0c1106 APP=blink DEBUG=off
 make BOARD=<board> APP=i2c_regmap_demo DEBUG=on VERSION=01.02
-make BOARD=<board> APP=<app> flash          # OpenOCD, bench probe
-make BOARD=<board> APP=<app> gdb            # attach debugger
-make BOARD=<board> APP=<app> size           # section sizes vs flash/RAM budget
+make BOARD=<board> APP=<app> DEBUG=off flash # OpenOCD, bench probe
+make BOARD=<board> APP=<app> DEBUG=off gdb   # attach debugger
+make BOARD=<board> APP=<app> DEBUG=off size  # section sizes vs flash/RAM budget
 make misra                                   # cppcheck MISRA, deviation-log workflow
-make test                                    # host unit tests (native gcc)
-make clean / clean-all / info
+make DEBUG=off test                          # host unit tests (native gcc)
+make DEBUG=off clean / clean-all / info
 ```
 
 Board selects device (`board.mk: DEVICE := mspm0c1106`); apps declare nothing about the MCU. `VERSION` gets format validation (review §4.4). Outputs: `.elf`, `.map`, `.bin`, `.hex` + `crc32` stamped into a fixed flash location (image identity — feeds the future A/B bootloader on both platforms).

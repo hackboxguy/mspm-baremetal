@@ -10,15 +10,18 @@ MAP := $(OUT_DIR)/$(TARGET).map
 APP_SRCS := $(wildcard app/$(APP)/*.c)
 BOARD_SRCS := $(wildcard board/$(BOARD)/*.c)
 HAL_SRCS := $(wildcard hal/*.c)
+LIB_SRCS := $(wildcard lib/*.c)
 DEVICE_SRCS := $(DEVICE_DIR)/startup.c $(DEVICE_DIR)/image_identity_placeholder.c
-C_SRCS := $(APP_SRCS) $(BOARD_SRCS) $(HAL_SRCS) $(DEVICE_SRCS)
+C_SRCS := $(APP_SRCS) $(BOARD_SRCS) $(HAL_SRCS) $(LIB_SRCS) $(DEVICE_SRCS)
 OBJECTS := $(addprefix $(BUILD_DIR)/,$(C_SRCS:.c=.o))
 DEPS := $(OBJECTS:.o=.d)
 
-FORMAT_SOURCES := $(C_SRCS) $(wildcard board/$(BOARD)/*.h) \
-	$(wildcard $(DEVICE_DIR)/*.h) $(wildcard hal/*.h) $(wildcard tests/*.c)
+FORMAT_SOURCES := $(C_SRCS) $(wildcard app/$(APP)/*.h) \
+	$(wildcard board/$(BOARD)/*.h) \
+	$(wildcard $(DEVICE_DIR)/*.h) $(wildcard hal/*.h) $(wildcard lib/*.h) \
+	$(wildcard tests/*.c)
 
-CPPFLAGS := $(DEVICE_CPPFLAGS) $(VARIANT_CPPFLAGS)
+CPPFLAGS := -I$(PROJ_ROOT)/lib $(DEVICE_CPPFLAGS) $(VARIANT_CPPFLAGS)
 CFLAGS := $(COMMON_CFLAGS) $(CPU_FLAGS) $(OPTIMIZATION)
 LDFLAGS := $(CPU_FLAGS) -nostdlib -nostartfiles -nodefaultlibs \
 	-Wl,--gc-sections -Wl,--build-id=none -Wl,-Map,$(MAP) \
@@ -35,7 +38,7 @@ $(ELF): $(OBJECTS) $(LINKER_SCRIPT) | $(OUT_DIR)
 	$(CC) $(LDFLAGS) $(OBJECTS) -lgcc -o $@
 
 $(BIN): $(ELF)
-	$(OBJCOPY) -O binary $< $@
+	$(OBJCOPY) --gap-fill 0xff -O binary $< $@
 
 $(HEX): $(ELF)
 	$(OBJCOPY) -O ihex $< $@

@@ -10,8 +10,8 @@ typedef struct {
     uint32_t pincm_index;
 } hal_gpio_output_t;
 
-/* Reset and enable a GPIO port before configuring its pins. */
-bool hal_gpio_port_reset_enable(uintptr_t port_base);
+/* Reset, enable, and wait for the documented GPIO bus-isolation startup time. */
+void hal_gpio_port_reset_enable(uintptr_t port_base);
 
 /* Configure a GPIO output low, then enable its output driver. */
 bool hal_gpio_output_init(const hal_gpio_output_t *output);

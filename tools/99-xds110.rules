@@ -1,0 +1,3 @@
+# TI XDS110 CMSIS-DAP debug probe (LP-MSPM0C1106 and compatible boards).
+# Install as /etc/udev/rules.d/99-xds110.rules on native Linux hosts.
+SUBSYSTEM=="usb", ATTR{idVendor}=="0451", ATTR{idProduct}=="bef3", MODE="0660", GROUP="plugdev", TAG+="uaccess"

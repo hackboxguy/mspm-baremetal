@@ -18,10 +18,10 @@ The intended developer interface remains familiar to the existing RH850
 project:
 
 ```sh
-make BOARD=lp_mspm0c1106 APP=blink
+make BOARD=lp_mspm0c1106 APP=blink DEBUG=off
 make BOARD=lp_mspm0c1106 APP=i2c_regmap_demo DEBUG=on VERSION=01.02
-make BOARD=lp_mspm0c1106 APP=blink flash
-make test
+make BOARD=lp_mspm0c1106 APP=blink DEBUG=off flash
+make DEBUG=off test
 ```
 
 This document defines implementation order, ownership boundaries, acceptance
@@ -190,9 +190,9 @@ handler until RAM is initialized.
 **Acceptance gate**
 
 ```sh
-make BOARD=lp_mspm0c1106 APP=blink
+make BOARD=lp_mspm0c1106 APP=blink DEBUG=off
 make BOARD=lp_mspm0c1106 APP=blink DEBUG=on VERSION=01.02
-make test
+make DEBUG=off test
 ```
 
 - Both builds produce ELF, BIN, HEX, map, and a source-tree-preserving object
