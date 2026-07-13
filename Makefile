@@ -44,9 +44,9 @@ include make/rules.mk
 
 .DEFAULT_GOAL := all
 
-.PHONY: all clean clean-all flash format-check gdb info size test
+.PHONY: all clean clean-all flash format-check gdb identity-check identity-readback info size test
 
-all: $(ELF) $(BIN) $(HEX)
+all: identity-check
 
 test:
 	$(MAKE) -C tests test
@@ -60,6 +60,8 @@ info:
 	@echo "DEVICE      = $(DEVICE)"
 	@echo "DEBUG       = $(DEBUG)"
 	@echo "VERSION     = $(VERSION)"
+	@echo "SOURCE_ID   = $(SOURCE_ID)"
+	@echo "SOURCE_DIRTY= $(SOURCE_DIRTY)"
 	@echo "TOOLCHAIN   = $(TOOLCHAIN_VERSION)"
 	@echo "BUILD_DIR   = $(BUILD_DIR)"
 	@echo "OUTPUT_DIR  = $(OUT_DIR)"

@@ -7,9 +7,10 @@ program-and-verify cycle and visibly blinks the board's PA0 red LED. See
 `docs/bringup_lp_mspm0c1106.md` for the precise tested setup and remaining
 Phase 1 evidence. The portable `lib_ringbuf` SPSC primitive, UART0 TX, and
 compile-out `lib_debug` transport layer are complete. The 115200-baud
-backchannel debug-banner test is recorded; UART burst and overflow evidence is
-the next transport bench gate. WWDT0 reset and reset-cause retention are
-bench-proven; deliberate HardFault capture is also proven. Power-cycle
+backchannel debug-banner, 32-byte lossless burst, and 128-byte overload/drop
+counter tests are recorded. WWDT0 reset and reset-cause retention are
+bench-proven; deliberate HardFault capture is also proven. Canonical image
+identity artifact/read-back comparison is also bench-proven. Power-cycle
 retention remains.
 
 ## Commands

@@ -36,7 +36,9 @@ make OPENOCD=/path/to/openocd BOARD=lp_mspm0c1106 APP=blink DEBUG=off flash
 ```
 
 Artifacts are written to `output/<board>/<app>/<variant>/` as ELF, BIN, HEX,
-and map files.  See [the accepted implementation plan](docs/mspm-mcu-code-base-plan.md),
+and map files. The ELF is canonically stamped with a fixed flash
+[image identity](docs/image_identity.md); `make ... identity-check` verifies
+that its BIN and HEX match. See [the accepted implementation plan](docs/mspm-mcu-code-base-plan.md),
 [device facts](docs/device_facts.md), and [vendored-header provenance](ti/README.md).
 `make clean` removes the selected board/application/variant output; use
 `make clean-all` to remove every generated output tree.

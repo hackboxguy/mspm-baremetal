@@ -31,6 +31,18 @@ Program and verify the ELF with the board-specific, MAIN-only configuration:
 make OPENOCD=/path/to/openocd BOARD=lp_mspm0c1106 APP=blink flash
 ```
 
+After flashing, compare the target's read-only image-identity block with the
+canonical ELF. This halts and resumes the core but never erases or programs
+flash:
+
+```sh
+make OPENOCD=/path/to/openocd BOARD=lp_mspm0c1106 APP=blink \
+  DEBUG=off identity-readback
+```
+
+See [`docs/image_identity.md`](../docs/image_identity.md) for the byte format
+and CRC coverage rule.
+
 The configuration declares **only MAIN flash** at `0x00000000`; it contains no
 NONMAIN, BCR, BSL, data-flash, mass-erase, or factory-reset command. The
 `program ... verify reset exit` command can erase only the MAIN-flash sectors

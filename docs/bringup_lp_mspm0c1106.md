@@ -116,6 +116,57 @@ banner. A reset-halted record read at `0x2000007C` returned
 valid magic and CRC, sequence 1, software CPU-reset cause `0x1D`, HardFault
 reason 2, the stacked `udf` PC `0x00000140`, and xPSR `0x01000000`.
 
+## 2026-07-13 — canonical image identity
+
+The post-link identity tool now patches a fixed 64-byte block at
+`0x0000FFC0` in the canonical ELF, then derives the BIN and HEX artifacts.
+For the release `blink` build (`VERSION=01.02`) tested here, the identity was
+format 1, source ID `ac2a5153c91c`, flags `0x0001` (dirty working tree), span
+`0x10000`, and CRC32 `0x5ebe198c`. `make ... identity-check` verified that the
+ELF, BIN, and HEX contained exactly the same identity and defined flash
+content; the BIN's intervening gap was verified as `0xFF`.
+
+The same canonical ELF was programmed with the validated MAIN-only
+program-and-verify command. A separate command then halted the target, read
+only `0x0000FFC0`–`0x0000FFFF`, compared the 64 bytes to the ELF, resumed the
+target, and reported a match:
+
+```sh
+make OPENOCD=/tmp/openocd-source/src/openocd \
+  BOARD=lp_mspm0c1106 APP=blink DEBUG=off VERSION=01.02 identity-readback
+```
+
+This closes the Phase 1 image-identity artifact and target read-back gate.
+
+## 2026-07-13 — UART TX burst and overflow counter
+
+The debug `uart_tx_test` image first enqueues a 32-byte lossless burst, waits
+for the TX ISR to drain it, then enqueues one 128-byte overload burst. The
+board queue is 64 bytes, so the test accepts exactly its first 64 bytes and
+requires `board_uart_backchannel_dropped_count()` to increase before it emits
+the final marker. It drives the red LED solid on either assertion failure.
+
+The XDS110 application UART was configured as before at 115200 8N1, then a
+15-second capture was started before programming the test image:
+
+```sh
+make OPENOCD=/tmp/openocd-source/src/openocd \
+  BOARD=lp_mspm0c1106 APP=uart_tx_test DEBUG=on VERSION=01.02 flash
+```
+
+The captured byte stream was:
+
+```text
+mspm-baremetal: uart_tx_test
+0123456789ABCDEF0123456789ABCDEFUART_TX_LOSSLESS_OK
+0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEFUART_TX_OVERFLOW_OK
+```
+
+The first payload is all 32 expected bytes. The second contains four complete
+16-byte blocks (64 bytes), no more, followed by `UART_TX_OVERFLOW_OK`; the app
+only emits that marker after its overflow counter has advanced. OpenOCD's
+MAIN-only binary fallback comparison ended with `** Verified OK **`.
+
 ## Troubleshooting
 
 - Before the Phase 1 fault recorder is implemented, every unhandled exception
@@ -127,7 +178,4 @@ reason 2, the stacked `udf` PC `0x00000140`, and xPSR `0x01000000`.
 
 - GDB client attach and known-symbol stop through `make ... gdb`.
 - Clock-frequency measurement and fallback-path test.
-- UART TX burst and overflow/drop-counter evidence. The boot banner and
-  terminal path are verified on `/dev/ttyACM0` at 115200 baud.
 - Power-cycle `.noinit` retention and watchdog normal-operation timing.
-- Canonical image-identity patching plus artifact/read-back comparison.

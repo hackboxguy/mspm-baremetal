@@ -23,13 +23,13 @@
   initialization and commits it to the CRC-protected `.noinit` crash record.
   The record is never trusted until its magic, format, size, and CRC validate.
   Fault capture commits the magic word last, then requests a system reset.
-- The fixed flash image-identity block is reserved now. **Target state —
-  pending Phase 1 identity work:** patch the ELF first, then derive matching
-  HEX and BIN artifacts. The future identity CRC covers defined content from
-  `ORIGIN(FLASH)` through `__data_load_end`, plus the identity block, with the
-  CRC field treated as zero. It excludes the erased gap between those ranges.
+- The fixed flash image-identity block is host-stamped in the canonical ELF
+  before the HEX and BIN are derived. Its CRC covers defined flash content from
+  `ORIGIN(FLASH)` through `__data_load_end`, followed by the identity block
+  with its CRC field zeroed. It excludes the erased gap between those ranges.
   The BIN serialises that gap as `0xFF`, matching erased MAIN flash; an
-  ELF-programmed target does not write the gap.
+  ELF-programmed target does not write the gap. The exact format and
+  read-back procedure are in [image_identity.md](image_identity.md).
 
 ## Interrupts and concurrency
 

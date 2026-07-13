@@ -34,6 +34,10 @@ jobs:
         run: make BOARD=lp_mspm0c1106 APP=fault_record_test DEBUG=on VERSION=01.02
       - name: Build release fault-record test
         run: make BOARD=lp_mspm0c1106 APP=fault_record_test DEBUG=off VERSION=01.02
+      - name: Build debug UART TX test
+        run: make BOARD=lp_mspm0c1106 APP=uart_tx_test DEBUG=on VERSION=01.02
+      - name: Build release UART TX test
+        run: make BOARD=lp_mspm0c1106 APP=uart_tx_test DEBUG=off VERSION=01.02
 
       - name: Report release size
         run: make BOARD=lp_mspm0c1106 APP=blink DEBUG=off size
