@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  phase0:
+    runs-on: ubuntu-24.04
+    env:
+      CI: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain and checks
+        run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi clang-format
+
+      - name: Build release placeholder
+        run: make BOARD=lp_mspm0c1106 APP=blink DEBUG=off
+
+      - name: Build debug placeholder
+        run: make BOARD=lp_mspm0c1106 APP=blink DEBUG=on VERSION=01.02
+
+      - name: Run host tests
+        run: make test
+
+      - name: Check formatting
+        run: make format-check

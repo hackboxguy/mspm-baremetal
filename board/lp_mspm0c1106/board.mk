@@ -1,0 +1,1 @@
+DEVICE := mspm0c1106

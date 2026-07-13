@@ -1,0 +1,13 @@
+DEVICE := mspm0c1106
+DEVICE_DIR := device/$(DEVICE)
+CPU_FLAGS := -mcpu=cortex-m0plus -mthumb
+LINKER_SCRIPT := $(DEVICE_DIR)/linker.ld
+
+DEVICE_CPPFLAGS := -D__MSPM0C1106__ \
+	-DFW_VERSION_MAJOR=0x$(VERSION_MAJOR)u \
+	-DFW_VERSION_MINOR=0x$(VERSION_MINOR)u \
+	-I$(PROJ_ROOT)/$(DEVICE_DIR) \
+	-I$(PROJ_ROOT)/board/$(BOARD) \
+	-I$(PROJ_ROOT)/hal \
+	-I$(PROJ_ROOT)/ti/cmsis \
+	-I$(PROJ_ROOT)/ti/mspm0c1106
