@@ -8,6 +8,8 @@ BOARD ?= lp_mspm0c1106
 APP ?= blink
 DEBUG ?= off
 VERSION ?= 00.00
+OPENOCD ?= openocd
+GDB ?= arm-none-eabi-gdb
 
 # Some developer shells export DEBUG=release.  Only the documented make
 # command-line setting participates in this project configuration.
@@ -40,7 +42,7 @@ include make/rules.mk
 
 .DEFAULT_GOAL := all
 
-.PHONY: all clean clean-all format-check gdb info size test
+.PHONY: all clean clean-all flash format-check gdb info size test
 
 all: $(ELF) $(BIN) $(HEX)
 
@@ -60,13 +62,20 @@ info:
 	@echo "BUILD_DIR   = $(BUILD_DIR)"
 	@echo "OUTPUT_DIR  = $(OUT_DIR)"
 	@echo "ELF         = $(ELF)"
+	@echo "OPENOCD     = $(OPENOCD)"
+	@echo "OPENOCD_CFG = $(OPENOCD_CONFIG)"
 
 size: $(ELF)
 	$(SIZE) --format=berkeley $(ELF)
 
-gdb:
-	@echo "Debug-server integration is introduced in Phase 1."
-	@false
+flash: $(ELF)
+	$(OPENOCD) -f $(OPENOCD_CONFIG) \
+		-c "program $(abspath $(ELF)) verify reset exit"
+
+gdb: $(ELF)
+	@echo "OpenOCD GDB server will listen on :3333; terminate it with Ctrl-C."
+	@echo "In a second terminal: $(GDB) $(ELF) -ex 'target extended-remote :3333'"
+	$(OPENOCD) -f $(OPENOCD_CONFIG)
 
 clean:
 	rm -rf $(BUILD_DIR) $(OUT_DIR)
