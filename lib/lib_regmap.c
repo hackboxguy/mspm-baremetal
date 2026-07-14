@@ -21,6 +21,11 @@ static uint32_t lib_regmap_snapshot_reader_count(uint32_t state, uint8_t buffer_
            LIB_REGMAP_SNAPSHOT_READER_MASK;
 }
 
+/* One main-loop publisher owns this counter; diagnostics may read it stale. */
+static void lib_regmap_snapshot_note_publish_rejected(lib_regmap_snapshot_t *snapshot) {
+    ++snapshot->publish_rejected_count;
+}
+
 static bool lib_regmap_snapshot_acquire(lib_regmap_snapshot_t *snapshot,
                                         uint8_t *buffer_index) {
     uint32_t state;
@@ -114,6 +119,8 @@ bool lib_regmap_command_queue_enqueue(void *context, uint16_t address, uint8_t v
     const uint32_t write_index = queue == NULL ? 0U : queue->write_index;
     const uint32_t read_index = queue == NULL ? 0U : queue->read_index;
 
+    /* Public callback contexts remain defensively validated until ISR timing is
+     * measured. */
     if ((queue == NULL) || (queue->storage == NULL) ||
         !lib_regmap_is_power_of_two(queue->capacity)) {
         return false;
@@ -172,6 +179,7 @@ bool lib_regmap_snapshot_init(lib_regmap_snapshot_t *snapshot, uint8_t *buffer_z
         buffer_one[index] = value;
     }
     atomic_init(&snapshot->state, 0U);
+    snapshot->publish_rejected_count = 0U;
     return true;
 }
 
@@ -190,6 +198,7 @@ bool lib_regmap_snapshot_publish(lib_regmap_snapshot_t *snapshot, const uint8_t 
     state = (uint32_t)atomic_load_explicit(&snapshot->state, memory_order_acquire);
     inactive_index = (uint8_t)((state & LIB_REGMAP_SNAPSHOT_ACTIVE_MASK) ^ UINT32_C(1));
     if (lib_regmap_snapshot_reader_count(state, inactive_index) != 0U) {
+        lib_regmap_snapshot_note_publish_rejected(snapshot);
         return false;
     }
 
@@ -201,6 +210,7 @@ bool lib_regmap_snapshot_publish(lib_regmap_snapshot_t *snapshot, const uint8_t 
     for (;;) {
         if (((state & LIB_REGMAP_SNAPSHOT_ACTIVE_MASK) ^ UINT32_C(1)) !=
             inactive_index) {
+            lib_regmap_snapshot_note_publish_rejected(snapshot);
             return false;
         }
         desired = state ^ LIB_REGMAP_SNAPSHOT_ACTIVE_MASK;
@@ -210,6 +220,11 @@ bool lib_regmap_snapshot_publish(lib_regmap_snapshot_t *snapshot, const uint8_t 
             return true;
         }
     }
+}
+
+uint32_t
+lib_regmap_snapshot_publish_rejected_count(const lib_regmap_snapshot_t *snapshot) {
+    return snapshot == NULL ? 0U : snapshot->publish_rejected_count;
 }
 
 bool lib_regmap_init(lib_regmap_t *regmap, const lib_regmap_page_t *pages,
@@ -260,6 +275,7 @@ uint16_t lib_regmap_current_address(const lib_regmap_t *regmap) {
 }
 
 void lib_regmap_begin_read(lib_regmap_t *regmap) {
+    /* A new ADDR+R releases a latch leaked by an aborted prior transaction. */
     lib_regmap_end_read(regmap);
 }
 

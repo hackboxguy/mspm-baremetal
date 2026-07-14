@@ -1,3 +1,4 @@
+#include "arch_wait.h"
 #include "board.h"
 #include "hal_timer.h"
 #include "hal_wdt.h"
@@ -13,7 +14,7 @@ int main(void) {
         /* Best effort: a steady LED distinguishes a board-init failure. */
         board_led_red_set(true);
         for (;;) {
-            hal_timer_wait_for_interrupt();
+            arch_wait_for_interrupt();
         }
     }
 
@@ -26,7 +27,7 @@ int main(void) {
         /* A steady LED is an unambiguous timer-bring-up failure indication. */
         board_led_red_set(true);
         for (;;) {
-            hal_timer_wait_for_interrupt();
+            arch_wait_for_interrupt();
         }
     }
 
@@ -34,7 +35,7 @@ int main(void) {
     if (!hal_wdt_init()) {
         board_led_red_set(true);
         for (;;) {
-            hal_timer_wait_for_interrupt();
+            arch_wait_for_interrupt();
         }
     }
 
@@ -46,6 +47,6 @@ int main(void) {
         }
 
         hal_wdt_kick();
-        hal_timer_wait_for_interrupt();
+        arch_wait_for_interrupt();
     }
 }

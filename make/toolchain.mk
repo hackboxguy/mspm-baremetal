@@ -11,6 +11,9 @@ endif
 ifeq ($(origin SIZE),undefined)
 SIZE := arm-none-eabi-size
 endif
+ifeq ($(origin NM),undefined)
+NM := arm-none-eabi-nm
+endif
 TOOLCHAIN_VERSION ?= 13.2.1
 
 CC_VERSION := $(shell $(CC) -dumpfullversion -dumpversion 2>/dev/null)

@@ -44,12 +44,20 @@ include make/rules.mk
 
 .DEFAULT_GOAL := all
 
-.PHONY: all clean clean-all flash format-check gdb identity-check identity-readback info size test
+.PHONY: all clean clean-all flash format-check gdb identity-check identity-readback info \
+	size test link-test
 
 all: identity-check
 
 test:
 	$(MAKE) -C tests test
+
+LINK_TEST_VARIANT := $(if $(filter on,$(DEBUG)),debug,release)
+LINK_TEST_ELF := output/$(BOARD)/lib_link_test/$(LINK_TEST_VARIANT)/$(BOARD)_lib_link_test.elf
+
+link-test:
+	$(MAKE) BOARD=$(BOARD) APP=lib_link_test DEBUG=$(DEBUG) VERSION=$(VERSION) elf
+	test -z "$$($(NM) --undefined-only $(LINK_TEST_ELF))"
 
 format-check:
 	clang-format --dry-run -Werror $(FORMAT_SOURCES)

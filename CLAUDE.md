@@ -21,12 +21,19 @@ HardFault frame snapshot; re-run the deliberate-HardFault test after any future
 fault-path change.
 
 Phase 2 has started with host-tested `lib_buildinfo`, `lib_boot`, `lib_regmap`,
-and a safe `lib_crash` diagnostics-page encoder. The C1106 target pin pair is
-I2C1 PB2/PB3, exposed at BoosterPack positions 9/10; the board's I2C pull-up
-footprints are DNC. The I2C target/controller HALs and demo remain blocked on
-the C-series target errata/ISR sequencing review and the documented 3.3 V bus
-fixture evidence; see `docs/i2c_register_map.md` for the frozen portable
-transaction contract.
+and a safe `lib_crash` diagnostics-page encoder. The Cortex-M0+ target link
+test references every portable library, including the PRIMASK-backed GCC atomic
+ABI and owned freestanding memory helpers required by `lib_regmap`; keep that
+test in CI whenever portable code changes. The C1106 target pin pair is I2C1
+PB2/PB3, exposed at BoosterPack positions 9/10; the board's I2C pull-up
+footprints are DNC. The I2C1 target backend and `i2c_regmap_demo` now build,
+with a host-tested register-free transaction engine and explicit C1106 errata
+handling: manual ACK plus delayed `SRXDONE` receive, `STXEMPTY` only for a
+transmit request, disabled target wakeup, and no `ACTIVE` toggle during
+recovery. The source-defined initial fixture is a 3.3 V, 100 kHz controller at
+address `0x42`; it remains unbench-tested and is not a supported field
+interface. `hal_i2c_controller` remains deferred. See
+`docs/i2c_register_map.md` for the contract and pending bus acceptance.
 
 ## Commands
 

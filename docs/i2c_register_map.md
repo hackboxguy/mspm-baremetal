@@ -1,9 +1,11 @@
 # I2C register-map contract
 
-**Status:** Phase 2 portable-library contract. `lib_regmap` is host-tested;
-no MSPM0 I2C target, controller, board address, or supported bus speed exists
-yet. This document therefore defines the protocol that those later components
-must implement, not a claimed on-target interface.
+**Status:** Phase 2 target-source slice. `lib_regmap` and the register-free
+target transaction engine are host-tested; `hal_i2c_target` and
+`app/i2c_regmap_demo` build for the C1106 but have not yet been accepted on a
+physical bus. The source configuration selects I2C1 target address `0x42` and
+an initial 100 kHz external-controller fixture; this is not yet a claimed
+on-target interface or a supported field bus.
 
 ## Wire protocol
 
@@ -20,19 +22,23 @@ Read:  [START] [ADDR+W] [addr_hi] [addr_lo] [RESTART] [ADDR+R] [data0] ... [NACK
 Current-address read: [START] [ADDR+R] [data0] ... [NACK] [STOP]
 ```
 
-The pointer changes only after both address bytes arrive. A STOP, NACK, bus
-error, or repeated START before the second byte leaves the previous pointer
-unchanged. A completed two-byte address phase commits the new pointer even if
+The pointer changes only after both address bytes arrive. A STOP, target error,
+or repeated START before the second byte leaves the previous pointer unchanged.
+A completed two-byte address phase commits the new pointer even if
 it is immediately followed by a repeated-start read and has no write data.
 
 ## Read snapshots and multi-byte values
 
-On every `ADDR+R`, the target calls `lib_regmap_begin_read()`. The first byte
-read from a registered page acquires that page's published snapshot. The same
-snapshot remains in use until the read moves to another page or the target
-calls `lib_regmap_end_read()` for STOP, NACK, error recovery, or a new address
-phase. A publisher uses the inactive buffer and returns failure rather than
-overwriting a snapshot held by an active read; main-loop code retries later.
+On every `ADDR+R`, the target calls `lib_regmap_begin_read()`. It first
+releases any previous latch, so a reader leaked by an aborted transaction can
+block a publish only until the next address-read transaction begins. The first
+byte read from a registered page acquires that page's published snapshot. The
+same snapshot remains in use until the read moves to another page or the
+target calls `lib_regmap_end_read()` for STOP (which the initial target requires
+after a final NACK), error recovery, or a new address phase. A publisher uses
+the inactive buffer and returns failure rather
+than overwriting a snapshot held by an active read; main-loop code retries
+later and records the rejection in the snapshot's publish-rejected counter.
 
 Consequently, a multi-byte value is coherent when all of its bytes are read in
 one transaction from one page. Multi-byte values are big-endian and masters
@@ -54,7 +60,8 @@ the main loop has applied the queued effect.
 This makes reads bounded in the ISR and assigns command lifetime explicitly:
 a command begins at receipt, is pending while queued, and is complete only
 when the main loop applies it. Future status/debug pages must expose pending,
-error, and dropped-command information before they offer asynchronous commands.
+error, dropped-command, and publish-rejected information before they offer
+asynchronous commands.
 
 ## Standard address allocation
 
@@ -64,9 +71,9 @@ error, and dropped-command information before they offer asynchronous commands.
 | `0x0100-0x01FF` | Status | RO | reserved for application state |
 | `0x0200-0x02FF` | Control | RW | queued main-loop commands only |
 | `0x0300-0x03FF` | Debug | RW/RO | reserved pending standard fields |
-| `0x0400-0x0FFF` | Standard expansion | reserved | unimplemented |
-| `0x1000-0x1017` | Crash record | RO | canonical `lib_crash` image defined below; a later target demo publishes it |
-| `0x1018-0x1FFF` | Diagnostics | RO | reserved |
+| `0x0400-0x0417` | Crash record | RO | canonical `lib_crash` image defined below; a later target demo publishes it |
+| `0x0418-0x0FFF` | Standard expansion | reserved | unimplemented |
+| `0x1000-0x1FFF` | Diagnostics | RO | reserved; preserves the RH850 live diagnostics allocation |
 | `0x2000-0xEFFF` | Application space | board/application defined | unimplemented |
 | `0xF000-0xFEFF` | Future update space | reserved | explicitly not a staging implementation |
 | `0xFF00-0xFFFF` | Future boot space | reserved | explicitly not a bootloader implementation |
@@ -90,7 +97,23 @@ timestamp was supplied by the release pipeline. The platform never uses
 `__DATE__` or `__TIME__`, so identical inputs do not acquire an accidental
 timestamp.
 
-### Crash record (`0x1000-0x1017`)
+### `i2c_regmap_demo` target status (`0x0300-0x0307`)
+
+The initial C1106 target demo uses this read-only debug subset. It is a demo
+diagnostic page, not a product command interface.
+
+| Address | Field | Encoding |
+|---:|---|---|
+| `0x0300-0x0303` | target transport error count | unsigned 32-bit big-endian |
+| `0x0304-0x0307` | status-page publish-rejected count | unsigned 32-bit big-endian |
+
+The error count covers target timeout, FIFO underflow/overflow,
+arbitration-loss, interrupt-overflow, and impossible software/hardware state
+events. It does not make a bus recovery claim: after an error the target drops
+its software transaction state and waits for the controller to terminate with
+STOP before a new transaction.
+
+### Crash record (`0x0400-0x0417`)
 
 `lib_crash_write_register_image()` converts the CRC-validated retained record
 to this 24-byte big-endian image. A register-map application publishes the
@@ -113,7 +136,7 @@ There is deliberately no acknowledge or clear register in this first
 diagnostics contract. The owner and reset semantics of a future acknowledge
 operation must be defined before any writable crash-page field is added.
 
-## RH850 comparison
+## Cross-platform allocation and RH850 comparison
 
 The address width, byte order, pointer persistence, auto-increment, unmapped
 read value, and read-only write behavior match the existing RH850 register-map
@@ -122,15 +145,33 @@ not yet guarantee: short address phases do not change the pointer, every
 transaction uses a page snapshot, and writes are queued rather than executed
 in the I2C ISR.
 
-The RH850 source has not been changed in this MSPM0-only repository. Until a
-coordinated RH850 update adopts these clarifications, the two implementations
-must not be claimed protocol-equivalent for snapshot or command timing.
+The following shared allocations are kept in both protocol documents:
+
+| Address range | MSPM0 status | RH850 status |
+|---|---|---|
+| `0x0000-0x03FF` | common device-info, status, control, and debug pages | same page allocation; field ownership remains application-specific |
+| `0x0400-0x0417` | canonical read-only crash-record image | reserved for that image; current firmware does not implement it |
+| `0x1000-0x1FFF` | diagnostics reserved in Phase 2 | diagnostics; `0x1000-0x1003` carry live backlight measurements |
+
+The RH850 firmware has not changed as part of this MSPM0 work. Until a
+coordinated RH850 firmware update adopts the snapshot and queued-command
+semantics, the two implementations must not be claimed protocol-equivalent for
+snapshot or command timing.
 
 ## Deferred hardware gate
 
-`hal_i2c_target`, `hal_i2c_controller`, and `app/i2c_regmap_demo` remain
-blocked until `device_facts.md` records the C1106 I2C pins, pin electrical
-configuration, target/controller FIFO and error behavior, errata, supported
-bus speed, and a documented external-master fixture. The target HAL must call
-the transaction APIs at the address, repeated-start, STOP, NACK, and recovery
-boundaries described above.
+The C1106 target source now implements the transaction boundaries above:
+`START` begins a receive or read snapshot; a repeated `START` discards a short
+address phase and begins the next direction; `STOP` and error paths release the
+read snapshot. The target uses manual receive ACKs and waits two module clocks
+after `SRXDONE` before reading RX data (I2C_ERR_08). It never toggles target
+`ACTIVE` after initialization (I2C_ERR_05), has no low-power target wakeup
+(`SWUEN` is disabled for I2C_ERR_04), and requires controller transfers at
+100 kHz or above with a terminating STOP (I2C_ERR_09/10).
+
+`hal_i2c_controller` remains deferred. Before the target can be called
+supported, the documented external-master fixture must verify address
+write/read/repeated-start/current-address behavior, short/aborted
+transactions, error recovery, target reset mid-transfer, stuck-SDA recovery,
+SCL-low timeout behavior, pull-up value/location, bus voltage, controller
+tool version, and the declared 100 kHz bus speed.

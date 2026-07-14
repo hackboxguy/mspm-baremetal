@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdint.h>
 
+#include "hal_i2c_target_engine.h"
 #include "lib_boot.h"
 #include "lib_buildinfo.h"
 #include "lib_crash.h"
@@ -357,6 +358,124 @@ static void test_regmap_access_rules_and_snapshot_latching(void) {
     lib_regmap_end_read(&regmap);
 }
 
+static void test_regmap_snapshot_recovers_after_aborted_read(void) {
+    uint8_t buffer_zero[2] = {0};
+    uint8_t buffer_one[2] = {0};
+    const uint8_t initial[2] = {UINT8_C(0x10), UINT8_C(0x11)};
+    const uint8_t first_update[2] = {UINT8_C(0x20), UINT8_C(0x21)};
+    const uint8_t second_update[2] = {UINT8_C(0x30), UINT8_C(0x31)};
+    lib_regmap_snapshot_t snapshot = {0};
+    const lib_regmap_page_t page = {
+        .first_address = 0U,
+        .length = UINT16_C(2),
+        .access = LIB_REGMAP_ACCESS_READ_ONLY,
+        .snapshot = &snapshot,
+    };
+    lib_regmap_t regmap = {0};
+
+    assert(lib_regmap_snapshot_init(&snapshot, buffer_zero, buffer_one,
+                                    (uint16_t)sizeof(buffer_zero), initial));
+    assert(lib_regmap_init(&regmap, &page, UINT16_C(1)));
+
+    lib_regmap_set_address(&regmap, 0U);
+    lib_regmap_begin_read(&regmap);
+    assert(lib_regmap_read_current(&regmap) == UINT8_C(0x10));
+    assert(lib_regmap_snapshot_publish(&snapshot, first_update,
+                                       (uint16_t)sizeof(first_update)));
+    assert(!lib_regmap_snapshot_publish(&snapshot, second_update,
+                                        (uint16_t)sizeof(second_update)));
+    assert(lib_regmap_snapshot_publish_rejected_count(&snapshot) == UINT32_C(1));
+
+    /* No end_read: emulate an aborted bus transaction before its STOP/NACK ISR. */
+    lib_regmap_begin_read(&regmap);
+    assert(lib_regmap_snapshot_publish(&snapshot, second_update,
+                                       (uint16_t)sizeof(second_update)));
+    assert(lib_regmap_snapshot_publish_rejected_count(&snapshot) == UINT32_C(1));
+}
+
+static void test_i2c_target_engine_protocol_boundaries(void) {
+    uint8_t read_zero[2] = {UINT8_C(0x10), UINT8_C(0x11)};
+    uint8_t read_one[2] = {0};
+    uint8_t control_zero[2] = {0};
+    uint8_t control_one[2] = {0};
+    lib_regmap_snapshot_t read_snapshot = {0};
+    lib_regmap_snapshot_t control_snapshot = {0};
+    lib_regmap_command_t commands[2] = {0};
+    lib_regmap_command_queue_t queue = {0};
+    const lib_regmap_page_t pages[] = {
+        {
+            .first_address = UINT16_C(0x0000),
+            .length = UINT16_C(2),
+            .access = LIB_REGMAP_ACCESS_READ_ONLY,
+            .snapshot = &read_snapshot,
+        },
+        {
+            .first_address = UINT16_C(0x0200),
+            .length = UINT16_C(2),
+            .access = LIB_REGMAP_ACCESS_READ_WRITE,
+            .snapshot = &control_snapshot,
+            .queue_write = lib_regmap_command_queue_enqueue,
+            .context = &queue,
+        },
+    };
+    lib_regmap_command_t command = {0};
+    lib_regmap_t regmap = {0};
+    hal_i2c_target_engine_t engine = {0};
+
+    assert(lib_regmap_snapshot_init(&read_snapshot, read_zero, read_one,
+                                    (uint16_t)sizeof(read_zero), read_zero));
+    assert(lib_regmap_snapshot_init(&control_snapshot, control_zero, control_one,
+                                    (uint16_t)sizeof(control_zero), control_zero));
+    assert(lib_regmap_command_queue_init(
+        &queue, commands, (uint32_t)(sizeof(commands) / sizeof(commands[0]))));
+    assert(
+        lib_regmap_init(&regmap, pages, (uint16_t)(sizeof(pages) / sizeof(pages[0]))));
+    assert(!hal_i2c_target_engine_init(0, &regmap));
+    assert(!hal_i2c_target_engine_init(&engine, 0));
+    assert(hal_i2c_target_engine_init(&engine, &regmap));
+
+    /* A short address phase is discarded at STOP without moving the pointer. */
+    lib_regmap_set_address(&regmap, UINT16_C(0x0001));
+    hal_i2c_target_engine_begin_receive(&engine);
+    assert(hal_i2c_target_engine_receive(&engine, UINT8_C(0x02)));
+    hal_i2c_target_engine_end(&engine);
+    assert(lib_regmap_current_address(&regmap) == UINT16_C(0x0001));
+
+    /* Address write followed by repeated-start read uses the committed address. */
+    hal_i2c_target_engine_begin_receive(&engine);
+    assert(hal_i2c_target_engine_receive(&engine, UINT8_C(0x00)));
+    assert(hal_i2c_target_engine_receive(&engine, UINT8_C(0x00)));
+    hal_i2c_target_engine_begin_transmit(&engine);
+    assert(hal_i2c_target_engine_transmit(&engine) == UINT8_C(0x10));
+    assert(hal_i2c_target_engine_transmit(&engine) == UINT8_C(0x11));
+    hal_i2c_target_engine_end(&engine);
+    assert(lib_regmap_current_address(&regmap) == UINT16_C(0x0002));
+
+    /* Writes enqueue in order and retain the standard pointer increment. */
+    hal_i2c_target_engine_begin_receive(&engine);
+    assert(hal_i2c_target_engine_receive(&engine, UINT8_C(0x02)));
+    assert(hal_i2c_target_engine_receive(&engine, UINT8_C(0x00)));
+    assert(hal_i2c_target_engine_receive(&engine, UINT8_C(0xa1)));
+    assert(hal_i2c_target_engine_receive(&engine, UINT8_C(0xa2)));
+    hal_i2c_target_engine_end(&engine);
+    assert(lib_regmap_command_queue_try_pop(&queue, &command));
+    assert(command.address == UINT16_C(0x0200));
+    assert(command.value == UINT8_C(0xa1));
+    assert(lib_regmap_command_queue_try_pop(&queue, &command));
+    assert(command.address == UINT16_C(0x0201));
+    assert(command.value == UINT8_C(0xa2));
+
+    /* A fresh read releases an aborted snapshot latch before it transmits. */
+    hal_i2c_target_engine_begin_receive(&engine);
+    assert(hal_i2c_target_engine_receive(&engine, UINT8_C(0x00)));
+    assert(hal_i2c_target_engine_receive(&engine, UINT8_C(0x00)));
+    hal_i2c_target_engine_begin_transmit(&engine);
+    assert(hal_i2c_target_engine_transmit(&engine) == UINT8_C(0x10));
+    hal_i2c_target_engine_abort(&engine);
+    assert(hal_i2c_target_engine_direction(&engine) == HAL_I2C_TARGET_ENGINE_IDLE);
+    assert(hal_i2c_target_engine_transmit(&engine) == LIB_REGMAP_UNMAPPED_VALUE);
+}
+
 static void test_crash_record_rejects_garbage_and_preserves_fault(void) {
     lib_crash_record_t record = {0};
     lib_crash_snapshot_t snapshot = {0};
@@ -464,6 +583,8 @@ int main(void) {
     test_regmap_command_queue();
     test_regmap_rejects_invalid_page_layout();
     test_regmap_access_rules_and_snapshot_latching();
+    test_regmap_snapshot_recovers_after_aborted_read();
+    test_i2c_target_engine_protocol_boundaries();
     test_crash_record_rejects_garbage_and_preserves_fault();
     test_crash_record_restarts_sequence_after_invalid_record();
     return 0;

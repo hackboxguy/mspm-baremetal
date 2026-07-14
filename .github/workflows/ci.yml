@@ -38,10 +38,19 @@ jobs:
         run: make BOARD=lp_mspm0c1106 APP=uart_tx_test DEBUG=on VERSION=01.02
       - name: Build release UART TX test
         run: make BOARD=lp_mspm0c1106 APP=uart_tx_test DEBUG=off VERSION=01.02
+      - name: Build debug I2C register-map demo
+        run: make BOARD=lp_mspm0c1106 APP=i2c_regmap_demo DEBUG=on VERSION=01.02
+      - name: Build release I2C register-map demo
+        run: make BOARD=lp_mspm0c1106 APP=i2c_regmap_demo DEBUG=off VERSION=01.02
+
+      - name: Link every portable library on Cortex-M0+
+        run: |
+          make BOARD=lp_mspm0c1106 DEBUG=off VERSION=01.02 link-test
+          make BOARD=lp_mspm0c1106 DEBUG=on VERSION=01.02 link-test
 
       - name: Explicitly verify image artifacts
         run: |
-          for app in blink fault_record_test uart_tx_test; do
+          for app in blink fault_record_test uart_tx_test i2c_regmap_demo; do
             for debug in off on; do
               make BOARD=lp_mspm0c1106 APP="$app" DEBUG="$debug" VERSION=01.02 identity-check
             done

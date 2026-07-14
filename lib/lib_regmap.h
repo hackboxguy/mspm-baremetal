@@ -40,6 +40,7 @@ typedef struct {
     uint8_t *buffers[2];
     uint16_t length;
     atomic_uint_least32_t state;
+    volatile uint32_t publish_rejected_count;
 } lib_regmap_snapshot_t;
 
 /* Initialize and publish from one main-loop context; publishers do not race. */
@@ -77,6 +78,8 @@ bool lib_regmap_snapshot_init(lib_regmap_snapshot_t *snapshot, uint8_t *buffer_z
                               const uint8_t *initial_data);
 bool lib_regmap_snapshot_publish(lib_regmap_snapshot_t *snapshot, const uint8_t *data,
                                  uint16_t length);
+uint32_t
+lib_regmap_snapshot_publish_rejected_count(const lib_regmap_snapshot_t *snapshot);
 
 bool lib_regmap_init(lib_regmap_t *regmap, const lib_regmap_page_t *pages,
                      uint16_t page_count);

@@ -22,7 +22,7 @@ IMAGE_IDENTITY_LAYOUT_ARGS := --flash-origin $(FLASH_ORIGIN) --flash-length $(FL
 
 APP_SRCS := $(wildcard app/$(APP)/*.c)
 BOARD_SRCS := $(wildcard board/$(BOARD)/*.c)
-ARCH_SRCS := $(wildcard arch/*.c)
+ARCH_SRCS ?= $(wildcard arch/*.c)
 HAL_SRCS := $(wildcard hal/*.c)
 LIB_SRCS := $(wildcard lib/*.c)
 DEVICE_SRCS := $(DEVICE_DIR)/startup.c $(DEVICE_DIR)/image_identity.c
@@ -50,7 +50,7 @@ $(BUILD_DIR)/%.o: %.c
 $(OUT_DIR):
 	@mkdir -p $@
 
-.PHONY: image-identity-force
+.PHONY: image-identity-force elf
 
 # The source identifier and dirty flag are build inputs, so always restamp.
 image-identity-force:
@@ -61,6 +61,8 @@ $(ELF): image-identity-force $(OBJECTS) $(LINKER_SCRIPT) $(IMAGE_IDENTITY_TOOL) 
 		--source-id "$(SOURCE_ID)" --source-dirty $(SOURCE_DIRTY) \
 		$(IMAGE_IDENTITY_DEBUG_ARG) $(IMAGE_IDENTITY_LAYOUT_ARGS)
 	$(PYTHON) $(IMAGE_IDENTITY_TOOL) verify --elf $@ $(IMAGE_IDENTITY_LAYOUT_ARGS)
+
+elf: $(ELF)
 
 $(BIN): $(ELF)
 	$(OBJCOPY) --gap-fill 0xff -O binary $< $@

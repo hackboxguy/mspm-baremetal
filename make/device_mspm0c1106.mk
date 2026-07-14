@@ -1,6 +1,7 @@
 DEVICE := mspm0c1106
 DEVICE_DIR := device/$(DEVICE)
 CPU_FLAGS := -mcpu=cortex-m0plus -mthumb
+ARCH_SRCS := arch/arch_atomic_cm0.c arch/arch_memory.c
 LINKER_SCRIPT := $(DEVICE_DIR)/linker.ld
 FLASH_ORIGIN := 0x00000000
 FLASH_LENGTH := 0x00010000

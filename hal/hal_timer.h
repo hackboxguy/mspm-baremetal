@@ -8,6 +8,5 @@
 bool hal_timer_init_1ms(void);
 uint32_t hal_timer_now_ms(void);
 bool hal_timer_deadline_reached(uint32_t deadline_ms);
-void hal_timer_wait_for_interrupt(void);
 
 #endif

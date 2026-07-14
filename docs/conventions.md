@@ -4,8 +4,9 @@
 
 - Firmware is C11 with fixed-width `<stdint.h>` types and builds warning-free
   with `-Wall -Wextra -Werror -Wconversion -Wshadow -Wundef`.
-- Applications include public board, HAL, and library headers only.  They do
-  not include `ti/` headers or access registers.
+- Applications include public board, HAL, and library headers, plus narrow
+  architecture abstractions such as `arch_wait.h`. They do not include `ti/`
+  headers or access registers.
 - `lib/` is register-free and host-testable.  Peripheral instances belong in
   HAL configuration/handles, never copied board-specific drivers.
 - Dynamic allocation and `printf` are forbidden.  The linker script exposes a
@@ -39,14 +40,18 @@
 ## Interrupts and concurrency
 
 - Cortex-M0+ has four priority levels: 0 is highest and 3 is lowest. The
-  Phase 1 blink image uses UART0 at priority 2 and SysTick at priority 3.
-  UART0 can pre-empt SysTick; SysTick cannot pre-empt UART0. The UART0 TX SPSC
-  producer is the main thread and its consumer is the priority-2 UART0 ISR.
+  Phase 2 I2C register-map demo uses I2C1 at priority 1, UART0 at priority 2,
+  and SysTick at priority 3. I2C1 can pre-empt UART0 and SysTick; UART0 can
+  pre-empt SysTick. The UART0 TX SPSC producer is the main thread and its
+  consumer is the priority-2 UART0 ISR.
   The UART TX queue has no ISR producer: a future producer must not run above
   priority 2 or share this queue without a new concurrency design. UART IMASK
   updates use a short PRIMASK critical section so future RX/error mask bits
   cannot be lost to a thread/ISR read-modify-write race.
-  No other exception or peripheral interrupt is enabled. Before enabling a
+  I2C1 owns the target transaction engine at priority 1. It is the
+  `lib_regmap` snapshot reader and queued-command producer; the main loop is
+  the snapshot publisher and queued-command consumer. It neither executes a
+  command callback nor changes a page snapshot in the ISR. Before enabling a
   further interrupt, document its priority, nesting relationship, and every
   producer/consumer pair here.
 - `lib_ringbuf` is a fixed-storage, byte-oriented SPSC primitive. Its capacity
@@ -58,7 +63,9 @@
 - `lib_regmap` uses a 16-bit EEPROM-style pointer. Its page snapshots are
   acquired on the first byte of each I2C read transaction and released on the
   transaction boundary; the producer publishes a new snapshot only when its
-  inactive buffer has no active reader. I2C-to-main command delivery is an
+  inactive buffer has no active reader. A new address-read transaction releases
+  any stale snapshot latch left by an aborted read; rejected publishes increment
+  a diagnostic counter. I2C-to-main command delivery is an
   ordered SPSC queue: the I2C ISR is its producer and the main loop is its
   consumer. No register-map callback runs application command work in an ISR.
   The full wire and snapshot contract is in

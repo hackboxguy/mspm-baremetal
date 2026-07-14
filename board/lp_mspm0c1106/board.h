@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "lib_regmap.h"
+
 #define BOARD_NAME "lp_mspm0c1106"
 
 /*
@@ -18,6 +20,7 @@
 #define BOARD_BLINK_PERIOD_MS UINT32_C(500)
 #define BOARD_BLINK_FALLBACK_PERIOD_MS UINT32_C(125)
 #define BOARD_UART_BACKCHANNEL_BAUD UINT32_C(115200)
+#define BOARD_I2C_REGMAP_TARGET_ADDRESS UINT8_C(0x42)
 
 typedef enum {
     BOARD_INIT_OK,
@@ -32,5 +35,6 @@ void board_led_red_set(bool on);
 void board_led_red_toggle(void);
 uint32_t board_uart_backchannel_dropped_count(void);
 bool board_crash_has_fault(void);
+bool board_i2c1_target_init(lib_regmap_t *regmap);
 
 #endif

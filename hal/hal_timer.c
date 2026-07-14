@@ -36,7 +36,3 @@ uint32_t hal_timer_now_ms(void) {
 bool hal_timer_deadline_reached(uint32_t deadline_ms) {
     return (uint32_t)(hal_timer_now_ms() - deadline_ms) < UINT32_C(0x80000000);
 }
-
-void hal_timer_wait_for_interrupt(void) {
-    __WFI();
-}

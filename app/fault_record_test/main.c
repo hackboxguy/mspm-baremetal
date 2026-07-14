@@ -1,3 +1,4 @@
+#include "arch_wait.h"
 #include "board.h"
 #include "hal_timer.h"
 #include "hal_wdt.h"
@@ -8,7 +9,7 @@
 static void fault_record_test_wait_healthy(void) {
     for (;;) {
         hal_wdt_kick();
-        hal_timer_wait_for_interrupt();
+        arch_wait_for_interrupt();
     }
 }
 
@@ -23,7 +24,7 @@ static void fault_record_test_indicate_retained_fault(void) {
                 hal_timer_now_ms() + FAULT_RECORD_TEST_RETAINED_BLINK_PERIOD_MS;
         }
         hal_wdt_kick();
-        hal_timer_wait_for_interrupt();
+        arch_wait_for_interrupt();
     }
 }
 
@@ -35,7 +36,7 @@ int main(void) {
         !hal_wdt_init()) {
         board_led_red_set(true);
         for (;;) {
-            hal_timer_wait_for_interrupt();
+            arch_wait_for_interrupt();
         }
     }
 

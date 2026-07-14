@@ -3,9 +3,10 @@ HOST_CC ?= gcc
 BUILD_DIR := build
 TEST_BIN := $(BUILD_DIR)/test_ringbuf
 TEST_SRCS := test_ringbuf.c ../lib/lib_boot.c ../lib/lib_buildinfo.c ../lib/lib_crash.c \
-	../lib/lib_debug.c ../lib/lib_regmap.c ../lib/lib_ringbuf.c
+	../lib/lib_debug.c ../lib/lib_regmap.c ../lib/lib_ringbuf.c \
+	../hal/hal_i2c_target_engine.c
 TEST_CFLAGS := -std=c11 -O1 -g3 -Wall -Wextra -Werror -Wconversion -Wshadow -Wundef \
-	-fsanitize=address,undefined -fno-omit-frame-pointer -I../lib
+	-fsanitize=address,undefined -fno-omit-frame-pointer -I../hal -I../lib
 
 .PHONY: all clean test
 

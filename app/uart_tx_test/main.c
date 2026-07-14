@@ -1,5 +1,6 @@
 #include <stdint.h>
 
+#include "arch_wait.h"
 #include "board.h"
 #include "hal_timer.h"
 #include "hal_uart.h"
@@ -25,7 +26,7 @@ static void uart_tx_test_wait_ms(uint32_t delay_ms) {
 
     while (!hal_timer_deadline_reached(deadline)) {
         hal_wdt_kick();
-        hal_timer_wait_for_interrupt();
+        arch_wait_for_interrupt();
     }
 }
 
@@ -33,7 +34,7 @@ static void uart_tx_test_fail(void) {
     board_led_red_set(true);
     for (;;) {
         hal_wdt_kick();
-        hal_timer_wait_for_interrupt();
+        arch_wait_for_interrupt();
     }
 }
 
@@ -82,6 +83,6 @@ int main(void) {
             next_toggle_ms = hal_timer_now_ms() + UART_TX_TEST_BLINK_PERIOD_MS;
         }
         hal_wdt_kick();
-        hal_timer_wait_for_interrupt();
+        arch_wait_for_interrupt();
     }
 }

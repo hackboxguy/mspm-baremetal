@@ -79,3 +79,8 @@ Confirm the current bus/device number with `lsusb` before using this command.
 
 Do not use an unreviewed OpenOCD target configuration or a `factory_reset`
 command.
+
+TI UniFlash/DSLite is installed locally only for the recorded no-write
+`--list-cores` connection probes. It is not a normal development flashing tool
+for either MSPM0C1106 or MSPM33C321A until a separately reviewed,
+device-specific flash workflow is documented.

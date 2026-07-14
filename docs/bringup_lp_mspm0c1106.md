@@ -207,6 +207,21 @@ such firmware, so there is no safe generic BSL probe to run. J101 exposes the
 XDS110 reset/BSL-invoke signals and J3/S1 drives PA18, but those signals only
 matter after a deliberately designed flash BSL implements an invocation policy.
 
+### I2C target source slice (not hardware acceptance)
+
+`app/i2c_regmap_demo` now builds a C1106 I2C1 target at 7-bit address `0x42`.
+It exposes device information at `0x0000`, target diagnostics at `0x0300`, and
+the read-only crash image at `0x0400`. The source uses open-drain PB2/PB3,
+target clock stretching, manual receive ACK, and an initial 100 kHz controller
+fixture. It disables target low-power wake (`SWUEN`) and never changes target
+`ACTIVE` after initialization in accordance with the C1106 I2C errata.
+
+This is a source/build milestone only. No I2C target image has been programmed
+and no external controller has been connected or tested. The first hardware
+session must use the 3.3 V external pull-up pair described above, send STOP at
+the end of every transfer, and record the fixture before treating the interface
+as supported.
+
 Before UniFlash was installed, this WSL host had no TI UniFlash/DSS executable
 (`dslite` or `uniflash`). `openjdk-17-jre` is only a runtime prerequisite; it
 does not install the UniFlash programming support needed for the separate

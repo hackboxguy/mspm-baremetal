@@ -391,8 +391,10 @@ and application state, rather than reproducing platform work.
 **Entry criteria:** Phase 2 is accepted, and the product board schematic,
 power sequence, pin assignments, clock requirements, I2C address, product
 acceptance behaviour, and a verified programming/debug path are available and
-reviewed.  The schematic must provide an accessible SWD header or verified BSL
-invoke/UART path; it must not depend on the LaunchPad's onboard probe.
+reviewed. The schematic must provide an accessible SWD header; it must not
+depend on the LaunchPad's onboard probe. For MSPM0C1106, a BSL/UART path cannot
+replace SWD until a separate flash-BSL security design has been approved and
+implemented.
 
 **Implement**
 

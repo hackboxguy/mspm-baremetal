@@ -3,6 +3,7 @@
 #include "device.h"
 #include "hal_clock.h"
 #include "hal_gpio.h"
+#include "hal_i2c_target.h"
 #include "hal_uart.h"
 #include "lib_crash.h"
 #include "lib_debug.h"
@@ -25,6 +26,16 @@ static hal_uart0_tx_config_t g_uart0_tx = {
     .baud_rate = BOARD_UART_BACKCHANNEL_BAUD,
     .tx_pincm_index = IOMUX_PINCM17,
     .tx_pincm_function = IOMUX_PINCM17_PF_UART0_TX,
+};
+
+static const hal_i2c_target_config_t g_i2c1_target = {
+    .instance_base = I2C1_BASE,
+    .interrupt_number = (int32_t)I2C1_INT_IRQn,
+    .scl_pincm_index = IOMUX_PINCM11,
+    .scl_pincm_function = IOMUX_PINCM11_PF_I2C1_SCL,
+    .sda_pincm_index = IOMUX_PINCM12,
+    .sda_pincm_function = IOMUX_PINCM12_PF_I2C1_SDA,
+    .own_address = BOARD_I2C_REGMAP_TARGET_ADDRESS,
 };
 
 #if defined(DEBUG_ENABLED)
@@ -79,4 +90,8 @@ uint32_t board_uart_backchannel_dropped_count(void) {
 
 bool board_crash_has_fault(void) {
     return lib_crash_has_fault(&g_crash_record);
+}
+
+bool board_i2c1_target_init(lib_regmap_t *regmap) {
+    return hal_i2c_target_init(&g_i2c1_target, regmap);
 }
