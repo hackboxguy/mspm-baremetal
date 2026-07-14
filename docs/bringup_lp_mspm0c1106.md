@@ -207,11 +207,26 @@ such firmware, so there is no safe generic BSL probe to run. J101 exposes the
 XDS110 reset/BSL-invoke signals and J3/S1 drives PA18, but those signals only
 matter after a deliberately designed flash BSL implements an invocation policy.
 
-This WSL host also has no TI UniFlash/DSS installation (`dslite` or
-`uniflash`). `openjdk-17-jre` is only a runtime prerequisite; it does not
-install the UniFlash programming support needed for the separate MSPM33
-workflow. No BSL command has been sent, and no BCR, NONMAIN, password, erase,
-or configuration change is authorised by this record.
+Before UniFlash was installed, this WSL host had no TI UniFlash/DSS executable
+(`dslite` or `uniflash`). `openjdk-17-jre` is only a runtime prerequisite; it
+does not install the UniFlash programming support needed for the separate
+MSPM33 workflow. No BSL command has been sent, and no BCR, NONMAIN, password,
+erase, or configuration change is authorised by this record.
+
+### UniFlash 9.6 tooling result
+
+UniFlash `9.6.0.5764` was subsequently installed at
+`/home/testpc/ti/uniflash_9.6.0`. Its target database contains both
+`MSPM0C1106` and `MSPM33C321A`, but a no-flash-operation C1106 core-list probe
+stopped during XDS110 initialisation. UniFlash requires probe firmware
+`3.0.0.43`; the attached XDS110 is `3.0.0.36`. Its automatic update attempt
+failed before target initialisation because WSL2 did not switch the probe into
+DFU mode.
+
+Consequently UniFlash has not yet been validated against either target. No
+target erase, program, reset, BCR/NONMAIN operation, or configuration change
+was requested. An XDS110 firmware update is a separate physical-probe change
+and requires explicit approval before retrying it.
 
 ## 2026-07-13 — UART TX burst and overflow counter
 
