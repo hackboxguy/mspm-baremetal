@@ -329,10 +329,13 @@ is ported.
 
 **Tooling feasibility**
 
-- Run a small, time-boxed ROM-BSL feasibility spike on the LaunchPad.  Record
-  invocation method, UART image-transfer result, BSL configuration constraints,
-  and tool/protocol findings in `device_facts.md`.  The outcome may be
-  “adopt for field flow” or “probe-only for now”; it may not remain assumed.
+- Close the C1106 bootloader decision with its actual architecture recorded:
+  it has no ROM BSL. A UART/I2C field flow therefore requires a user-owned
+  flash BSL at reset address `0x0`, which competes with the application for
+  MAIN flash and owns the reset/invocation and recovery policy. Do not add or
+  probe a bootloader merely to satisfy this phase. Record the outcome as
+  “deferred” unless a product requirement authorizes a separate security,
+  partition, authentication, power-loss, and host-tool design.
 
 **Protocol work**
 
@@ -375,8 +378,9 @@ criteria reviewable.
   SCL held low until the defined clock-stretch timeout.
 - The controller driver demonstrates a repeated-start transaction against a
   known device or controlled test target, with timeout/error paths exercised.
-- The BSL spike has a recorded pass/fail outcome and does not modify
-  NONMAIN/BCR outside the verified invocation/configuration procedure.
+- The C1106 bootloader decision is recorded as either deferred or a separately
+  accepted flash-BSL design. Neither outcome modifies NONMAIN/BCR as part of
+  this platform phase.
 - CI builds the added demo and executes all new host tests.
 
 ### Phase 3 — first product-board and application slice
@@ -567,7 +571,7 @@ design work.
 | I2C target IRQ/FIFO/recovery state machine | TRM/errata plus negative bus tests | Phase 2 |
 | Register-map execution context per page class (ISR vs published snapshot plus queued main-loop work) | FIFO/clock-stretch limits, worst-case handler timing, concurrency review, and host tests | Phase 2 before `lib_regmap` API freeze |
 | Register-map latch and busy-operation semantics | RH850 compatibility review and host tests | Phase 2 |
-| BSL feasibility and product-board invocation/debug path | LaunchPad BSL spike and product-board schematic review | Phase 2–3 |
+| C1106 field-update bootloader and product-board invocation/debug path | documented defer decision, or a separately reviewed flash-BSL design and product-board schematic review | Phase 2–3 |
 | Product peripherals and first product acceptance suite | product schematic/requirements | Phase 3 |
 | CI package versions and static-analysis baseline | reproducible CI runs | Phase 4 |
 | M33 FPU/TrustZone/compiler flags and HAL backend splits | M33 source documentation and board evidence | Phase 5 |

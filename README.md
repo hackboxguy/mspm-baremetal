@@ -6,16 +6,16 @@ support begins only after the MSPM0 platform gates are met.
 
 ## Current status
 
-Phase 0 is complete and Phase 1 bring-up is under way. `blink` configures the
+Phase 0 and Phase 1 are complete; the Phase 2 foundation is under way. `blink` configures the
 LaunchPad's red LED (`PA0`) and uses a SysTick 1 ms timebase to toggle it every
 500 ms. A MAIN-only OpenOCD program-and-verify cycle, reset, SWD liveness
 check, and visible blink have been bench-verified on an LP-MSPM0C1106. See the
 [bring-up record](docs/bringup_lp_mspm0c1106.md). The portable SPSC ring buffer,
-UART0 TX, and compile-out `lib_debug` transport layer are complete; the
-115200-baud backchannel debug-banner test has passed. UART burst and overflow
-evidence is the next transport bench gate. WWDT0 reset and retained
-reset-cause capture are also bench-verified, including a deliberate HardFault;
-power-cycle retention remains to be checked.
+UART0 TX, compile-out `lib_debug`, `lib_buildinfo`, `lib_boot`, `lib_regmap`,
+and safe crash-record encoder are complete. The 115200-baud banner, lossless
+burst, and overflow-counter evidence has passed. WWDT0 reset, retained
+reset-cause capture, a deliberate HardFault, and clean image-identity readback
+are bench-verified; power-cycle retention remains to be checked.
 
 ## Prerequisites
 
@@ -60,6 +60,7 @@ OpenOCD GDB server on port 3333; it does not program the target. See
 
 ## Safety boundary
 
-The MSPM0C1106 BCR/BSL configuration NVM is outside normal application flash.
-Normal commands declare only MAIN flash and may not erase or write BCR, BSL,
+The MSPM0C1106 configuration NVM is outside normal application flash. C-series
+has no ROM BSL; a field updater would be separately designed flash firmware.
+Normal commands declare only MAIN flash and may not erase or write BCR,
 NONMAIN, or DATA flash.

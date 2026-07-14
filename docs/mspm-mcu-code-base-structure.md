@@ -18,7 +18,7 @@
 | Compiler | CC-RH, proprietary, licensed, C89/C90, vendor types (`uint8`), `#pragma interrupt`, WSL `/tmp` copy hack | `arm-none-eabi-gcc` (free), C11, `stdint.h`, CMSIS attributes, native paths | Nothing in the build system transfers; forcing both into one Makefile means `ifeq` soup everywhere |
 | Language baseline | Frozen at C89 by CC-RH (declarations-at-top, no `//`…) | C11, designated initializers, `static_assert`, inline | A shared tree would drag the ARM code down to C89 or fork every file anyway |
 | Device headers / licensing | Renesas vendor header, Renesas license terms | TI MSPM0 SDK headers (BSD-3-Clause), CMSIS (Apache-2.0) | Cleaner to keep third-party license trees per vendor |
-| Flash/debug flow | Renesas flasher on Pi (`flashrh850.sh`), no on-chip debug in workflow | OpenOCD/pyOCD + GDB, TI ROM bootstrap loader (BSL) over UART | Different `tools/` entirely |
+| Flash/debug flow | Renesas flasher on Pi (`flashrh850.sh`), no on-chip debug in workflow | OpenOCD/pyOCD + GDB; MSPM0C needs a user-owned flash bootloader if field updates are required | Different `tools/` entirely |
 | CI | Blocked by CC-RH license | Free toolchain → full CI possible | You don't want the un-CI-able half poisoning the CI-able half |
 | Stability | `main` is a tested, shipping baseline | New, will churn heavily | Don't destabilize a hardware-validated repo with an unrelated port |
 
@@ -53,7 +53,7 @@ Two repos would duplicate the Makefile, `lib/`, HAL API, docs, and CI within wee
 | Peripherals of interest | UART, I2C (controller **and** target mode with FIFOs), TIMG/TIMA timers, 12-bit ADC, WWDT, DMA, GPIO, CRC *(verify per-part instance counts)* | Superset; check CAN-FD/LIN availability for the automotive use case *(verify)* |
 | Safety/quality | AEC-Q100 (-Q1); TI functional-safety collateral (FIT rates, safety manuals) *(verify tier)* | Same, likely higher safety tier *(verify)* |
 | Debug | SWD; XDS110 / J-Link / any CMSIS-DAP probe | SWD (+ TrustZone-aware debug) |
-| ROM bootloader | BSL over UART/I2C (documented protocol, invokable via pin or blank-flash) | Expected equivalent *(verify protocol compatibility with MSPM0 BSL)* |
+| Bootloader | MSPM0C needs a flash-based, user-owned UART/I2C bootloader; no ROM BSL | Expected equivalent *(verify architecture and protocol before reuse)* |
 
 Two facts matter architecturally: **the I2C peripheral has a proper target (slave) mode with FIFOs** — your EEPROM-style 16-bit register-map protocol ports directly and more comfortably than on RIIC; and **M0+ has no FPU and 4 interrupt priority levels** — the lowest common denominator the shared HAL must respect.
 
@@ -120,7 +120,7 @@ mspm-baremetal/
 │   └── Makefile
 ├── tools/
 │   ├── flash_openocd.sh          # make flash → OpenOCD (XDS110/CMSIS-DAP/J-Link)
-│   ├── bsl_flash.py              # UART ROM-bootloader flashing (Pi field flow, like flashrh850.sh)
+│   ├── bsl_flash.py              # future host for an accepted flash-BSL field flow
 │   ├── gdbinit                   # make gdb → openocd + arm-none-eabi-gdb attach
 │   └── size_report.py            # Section sizes + diff vs committed baseline
 ├── docs/
@@ -160,7 +160,7 @@ Deliberate differences from the RH850 repo, each traceable to a review finding:
 | C library | newlib-nano (`--specs=nano.specs --specs=nosys.specs`) | No heap by default; `printf` avoided in firmware (keep the RH850-style `hex8/hex32` putters) |
 | Build | **GNU Make** (your preference) | Structured as thin top Makefile + `make/*.mk` fragments so it stays readable; CMake/Meson deliberately not used |
 | Flash (bench) | **OpenOCD** (MSPM0 support is upstream — *verify the minimum version; MSPM33 support timing TBD*) | pyOCD (via TI CMSIS-Packs) and probe-rs as alternatives; TI UniFlash/dslite works but is closed-source — keep it out of the required path |
-| Flash (field/Pi) | **`tools/bsl_flash.py`** — TI ROM bootstrap loader over UART | Replaces the `flashrh850.sh` role: Pi toggles BSL-invoke + NRST GPIOs, streams the image over `/dev/ttyS0`. BSL protocol is documented by TI; implement in ~300 lines of Python, no proprietary tools on the Pi |
+| Flash (field/Pi) | **Deferred for MSPM0C1106** | C-series has no ROM BSL. Add a Pi host only with a separately accepted user-owned flash-BSL partition, hand-off, recovery, and security design. |
 | Debug | `arm-none-eabi-gdb` + OpenOCD (`make gdb`) | Any CMSIS-DAP probe; XDS110 on TI LaunchPads works with OpenOCD/pyOCD |
 | Static analysis | **cppcheck + MISRA addon** (same flow as RH850 → your deviation-log process ports as-is) + `clang-tidy` + GCC `-fanalyzer` | Three free analyzers ≫ one; MISRA deviation log format copied from the RH850 repo |
 | Unit tests | Host `gcc` + **Unity** (or plain assert harness) for `lib/` and pure logic | This is what was impossible to retrofit on RH850; here `lib/` is designed register-free so it compiles on the host unmodified |
@@ -227,7 +227,7 @@ Board selects device (`board.mk: DEVICE := mspm0c1106`); apps declare nothing ab
 ## 6. Phased bring-up plan
 
 1. **Phase 0 — skeleton (no hardware):** repo layout, `make/` fragments, vendored MSPM0C1106 headers, linker script + startup, `blink` app compiles, host tests + CI green. *(1-2 days)*
-2. **Phase 1 — MSPM0C1106 LaunchPad bring-up:** clock, GPIO, UART (banner + IRQ TX ring), SysTick 1 ms, watchdog, fault recorder. `make flash`/`gdb` working; `bsl_flash.py` against the LaunchPad's BSL. *(≈1 week)*
+2. **Phase 1 — MSPM0C1106 LaunchPad bring-up:** clock, GPIO, UART (banner + IRQ TX ring), SysTick 1 ms, watchdog, fault recorder. `make flash`/`gdb` working. A C1106 field bootloader is a separately scoped flash-BSL decision. *(≈1 week)*
 3. **Phase 2 — the I2C core:** `hal_i2c_target` + `lib_regmap` → `i2c_regmap_demo` answering the standard Pi `i2ctransfer` suite (reuse the RH850 test commands verbatim as the acceptance test); `hal_i2c_controller` with repeated-start write-read; ADC + temperature page if the first product needs it. *(1-2 weeks)*
 4. **Phase 3 — first product app + custom board:** port the relevant product logic (display-manager-style state machine ports almost mechanically once HAL and regmap exist).
 5. **Phase 4 — MSPM33C321:** add `ti/mspm33c321/` + `device/mspm33c321/` + `make/device_mspm33c321.mk`, bring up `blink` → UART → I2C on its LaunchPad. This phase is the test of the architecture: **target ≤ a few dozen changed lines outside `device/`/`ti/`/`board/`.** Divergences discovered here decide whether any `hal/mspm33/` backends are needed.
@@ -244,7 +244,7 @@ Board selects device (`board.mk: DEVICE := mspm0c1106`); apps declare nothing ab
 - **cppcheck MISRA** with the count pinned (fail on increase), same deviation-log process as RH850.
 - **Size regression:** `size_report.py` diffs section sizes vs a committed baseline (the golden-reference idea from `check_983_manager.py`, generalized).
 - **Format check** (`clang-format --dry-run -Werror`).
-- Optional later: HIL stage — a self-hosted Pi runner that BSL-flashes a LaunchPad and runs the `i2ctransfer` acceptance suite. Your Pi-centric field flow makes this unusually cheap to build.
+- Optional later: HIL stage — a self-hosted Pi runner that SWD-flashes a LaunchPad and runs the `i2ctransfer` acceptance suite. A field-flash HIL path is conditional on a separately accepted C1106 flash-BSL design.
 
 ---
 
@@ -271,8 +271,8 @@ Explicitly **not** ported: the timer-tick UART drain architecture (replaced by T
 1. **MSPM33 maturity** — new family: confirm SDK availability, OpenOCD/pyOCD support, BSL protocol, errata volume, and LaunchPad availability before committing schedules. If tooling is immature, Phases 0-3 on MSPM0 lose nothing — that's part of why one repo with a device abstraction is the right shape.
 2. **Device-fact verification** — every *(verify)* in §2 before `device/` constants are written; keep a `docs/device_facts.md` with datasheet section references (the RH850 repo's habit of citing the BIOS script line numbers is the model).
 3. **How shared is the peripheral IP really** between MSPM0 and MSPM33? If register maps match, `hal/` needs no backends at all; if not, the backend split adds a layer — decide at Phase 4 with evidence, not now.
-4. **BSL flashing of protected/production parts** — check BSL password/lockout behavior (automotive parts often ship with BSL locked after production); the field-update story may need to move to the I2C FW-update page (0xF000) + bootloader earlier than on RH850.
-5. **Flash write-protection / option bytes equivalents** (BCR/BSL config on MSPM0) — decide the production configuration early; it affects `bsl_flash.py` and manufacturing flow.
+4. **C1106 field-update bootloader** — C-series has no ROM BSL; if field update is required, decide the flash partition, hand-off, authentication, recovery, and power-loss policy before reserving an I2C update page or creating a host tool.
+5. **Flash write-protection / boot configuration** — decide the production configuration early. BCR is protected configuration NVM; a C1106 flash-BSL decision affects manufacturing flow but is not a BSL-configuration-NVM decision.
 
 ---
 
@@ -280,7 +280,7 @@ Explicitly **not** ported: the timer-tick UART drain architecture (replaced by T
 
 1. **New repo `mspm-baremetal`, separate from RH850** — different toolchain/licensing/CI reality; mirror the structure and conventions, not the code.
 2. **One repo for both MSPM0C1106 and MSPM33C321** — same toolchain and model; device differences isolated in `ti/`, `device/`, `make/device_*.mk`, `arch/`.
-3. **Open-source everything:** arm-none-eabi-gcc + newlib-nano, GNU Make, OpenOCD/pyOCD, TI ROM BSL via own Python tool for the Pi field flow, cppcheck/clang-tidy/-fanalyzer, Unity host tests, GitHub Actions CI.
+3. **Open-source everything:** arm-none-eabi-gcc + newlib-nano, GNU Make, OpenOCD/pyOCD, cppcheck/clang-tidy/-fanalyzer, Unity host tests, GitHub Actions CI. A C1106 flash-BSL host is deferred until its security design is accepted.
 4. **Own thin HAL over vendored BSD-licensed TI headers**; apps never touch registers; HAL API kept signature-compatible with the RH850 HAL.
 5. **The I2C 16-bit register-map protocol is the shared product contract** across all your MCUs — implement it once as `lib_regmap`, keep the spec doc canonical in both repos.
 6. **Bake in the RH850 review lessons as day-one design rules** (§3 table): correct `.data`/`.bss` startup with canaries, watchdog + fault recorder always on, dependency-tracked pinned-flag builds, instanced drivers instead of copies, IRQ-driven debug UART, CI matrix from the first commit.

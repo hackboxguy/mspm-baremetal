@@ -166,6 +166,53 @@ make OPENOCD=/tmp/openocd-source/src/openocd \
 
 This closes the Phase 1 image-identity artifact and target read-back gate.
 
+## 2026-07-14 — clean Phase 2 foundation image
+
+After commit `2b72ed2` added the portable register-map foundation, the
+LP-MSPM0C1106 was reattached and first passed the read-only SWD/factory-geometry
+probe. The freshly built clean release `blink` image was then programmed through
+the same MAIN-only configuration and returned `** Verified OK **`.
+
+The follow-up identity readback used the normal command:
+
+```sh
+make OPENOCD=/tmp/openocd-source/src/openocd \
+  BOARD=lp_mspm0c1106 APP=blink DEBUG=off VERSION=01.02 identity-readback
+```
+
+It matched the canonical ELF exactly: version `01.02`, source ID
+`2b72ed278a62`, clean flags `0x0000`, content length `0xC04`, and CRC32
+`0x52B82FF5`. This test made no BCR, BSL, NONMAIN, or DATA-flash change.
+
+## Phase 2 fixture preparation — I2C and bootloader decision
+
+The first I2C target will use I2C1 on the board's exposed BoosterPack-standard
+I2C pair:
+
+| Signal | LP-MSPM0C1106 pin | IOMUX | BoosterPack position |
+|---|---|---|---|
+| SCL | PB2 | `PINCM11`, `I2C1_SCL` | 9 |
+| SDA | PB3 | `PINCM12`, `I2C1_SDA` | 10 |
+
+The EVM schematic marks the I2C pull-up footprints R3 and R11 DNC. Before
+connecting a Raspberry Pi or another controller, use one external 3.3 V
+pull-up pair and a common ground. Do not put 5 V on either I2C signal or on the
+3.3 V rail. The fixture record must name the controller, operating system,
+`i2c-tools` version, pull-up value/location, measured or justified bus speed,
+and exact commands before target acceptance is claimed.
+
+The C1106 has no ROM BSL: a UART/I2C field-update path would instead be a
+user-owned flash BSL at reset address `0x0`. The present `blink` image has no
+such firmware, so there is no safe generic BSL probe to run. J101 exposes the
+XDS110 reset/BSL-invoke signals and J3/S1 drives PA18, but those signals only
+matter after a deliberately designed flash BSL implements an invocation policy.
+
+This WSL host also has no TI UniFlash/DSS installation (`dslite` or
+`uniflash`). `openjdk-17-jre` is only a runtime prerequisite; it does not
+install the UniFlash programming support needed for the separate MSPM33
+workflow. No BSL command has been sent, and no BCR, NONMAIN, password, erase,
+or configuration change is authorised by this record.
+
 ## 2026-07-13 — UART TX burst and overflow counter
 
 The debug `uart_tx_test` image first enqueues a 32-byte lossless burst, waits

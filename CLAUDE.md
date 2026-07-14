@@ -1,7 +1,8 @@
 # Project context
 
 This is a C11, GNU Make, bare-metal platform for TI MSPM0 and MSPM33 MCUs.
-Phase 0 is complete; Phase 1 MSPM0C1106 bring-up is under way. The
+Phase 0 and Phase 1 are complete; the Phase 2 MSPM0C1106 foundation is under
+way. The
 `lp_mspm0c1106` / `blink` release image has passed a MAIN-only OpenOCD
 program-and-verify cycle and visibly blinks the board's PA0 red LED. See
 `docs/bringup_lp_mspm0c1106.md` for the precise tested setup and remaining
@@ -20,10 +21,12 @@ HardFault frame snapshot; re-run the deliberate-HardFault test after any future
 fault-path change.
 
 Phase 2 has started with host-tested `lib_buildinfo`, `lib_boot`, `lib_regmap`,
-and a safe `lib_crash` diagnostics-page encoder. The I2C target/controller
-HALs and demo remain blocked on the recorded C1106 I2C pin, peripheral, errata,
-and bus-fixture evidence; see `docs/i2c_register_map.md` for the frozen
-portable transaction contract.
+and a safe `lib_crash` diagnostics-page encoder. The C1106 target pin pair is
+I2C1 PB2/PB3, exposed at BoosterPack positions 9/10; the board's I2C pull-up
+footprints are DNC. The I2C target/controller HALs and demo remain blocked on
+the C-series target errata/ISR sequencing review and the documented 3.3 V bus
+fixture evidence; see `docs/i2c_register_map.md` for the frozen portable
+transaction contract.
 
 ## Commands
 

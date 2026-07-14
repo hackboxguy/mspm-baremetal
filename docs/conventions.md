@@ -85,7 +85,8 @@
 ## Device safety
 
 - MAIN flash is the only region normal development commands may program.
-  BCR/NONMAIN/BSL configuration needs a dedicated production-security plan.
+  BCR/NONMAIN and any future field-update bootloader need a dedicated
+  production-security plan. MSPM0C1106 has no ROM-BSL configuration.
 - Every hardware constant in owned code must trace to `docs/device_facts.md`
   and its primary source or bench record.
 - Unhandled exceptions enter the CRC-gated fault recorder, which captures the
