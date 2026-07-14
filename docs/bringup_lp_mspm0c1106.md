@@ -217,16 +217,27 @@ erase, or configuration change is authorised by this record.
 
 UniFlash `9.6.0.5764` was subsequently installed at
 `/home/testpc/ti/uniflash_9.6.0`. Its target database contains both
-`MSPM0C1106` and `MSPM33C321A`, but a no-flash-operation C1106 core-list probe
-stopped during XDS110 initialisation. UniFlash requires probe firmware
-`3.0.0.43`; the attached XDS110 is `3.0.0.36`. Its automatic update attempt
-failed before target initialisation because WSL2 did not switch the probe into
-DFU mode.
+`MSPM0C1106` and `MSPM33C321A`. It requires XDS110 firmware `3.0.0.43`; the
+attached probe was explicitly updated from `3.0.0.36` through TI's DFU utility,
+then reattached to WSL2. The updater identified the probe as serial
+`MC010001` before the update and reported `3.0.0.43` afterwards.
 
-Consequently UniFlash has not yet been validated against either target. No
-target erase, program, reset, BCR/NONMAIN operation, or configuration change
-was requested. An XDS110 firmware update is a separate physical-probe change
-and requires explicit approval before retrying it.
+The following no-write C1106 probe then returned `Success` and identified core
+0 as `CORTEX_M0P`:
+
+```sh
+TI_APPDATA_DIR=/tmp/uniflash-appdata \
+  /home/testpc/ti/uniflash_9.6.0/dslite.sh \
+  --config=/tmp/mspm0c1106_xds110_probe.ccxml --list-cores --verbose
+```
+
+The probe invocation supplied no target image, erase, reset, or
+device-configuration option. The
+separate MSPM33C321A board was subsequently validated the same way: its
+XDS110 `M3010001` was updated from `3.0.0.38` to `3.0.0.43`, then its
+device-specific `--list-cores` probe identified `CORTEX_M33`, initialized the
+memory map, and returned `Success`. These are connection checks only; neither
+result is an MSPM33 flash validation.
 
 ## 2026-07-13 — UART TX burst and overflow counter
 
