@@ -11,11 +11,12 @@
 #define HAL_I2C_TARGET_ERRATA_RXDONE_NOPS UINT32_C(2)
 
 #define HAL_I2C_TARGET_INTERRUPT_MASK                                                  \
-    (I2C_CPU_INT_IMASK_SRXDONE_SET | I2C_CPU_INT_IMASK_STXEMPTY_SET |                  \
-     I2C_CPU_INT_IMASK_SSTART_SET | I2C_CPU_INT_IMASK_SSTOP_SET |                      \
-     I2C_CPU_INT_IMASK_TIMEOUTA_SET | I2C_CPU_INT_IMASK_TIMEOUTB_SET |                 \
-     I2C_CPU_INT_IMASK_STX_UNFL_SET | I2C_CPU_INT_IMASK_SRX_OVFL_SET |                 \
-     I2C_CPU_INT_IMASK_SARBLOST_SET | I2C_CPU_INT_IMASK_INTR_OVFL_SET)
+    (I2C_CPU_INT_IMASK_SRXDONE_SET | I2C_CPU_INT_IMASK_STXDONE_SET |                   \
+     I2C_CPU_INT_IMASK_STXEMPTY_SET | I2C_CPU_INT_IMASK_SSTART_SET |                   \
+     I2C_CPU_INT_IMASK_SSTOP_SET | I2C_CPU_INT_IMASK_TIMEOUTA_SET |                    \
+     I2C_CPU_INT_IMASK_TIMEOUTB_SET | I2C_CPU_INT_IMASK_STX_UNFL_SET |                 \
+     I2C_CPU_INT_IMASK_SRX_OVFL_SET | I2C_CPU_INT_IMASK_SARBLOST_SET |                 \
+     I2C_CPU_INT_IMASK_INTR_OVFL_SET)
 
 static I2C_Regs *g_i2c;
 static hal_i2c_target_engine_t g_engine;
@@ -35,25 +36,14 @@ static bool hal_i2c_target_config_is_valid(const hal_i2c_target_config_t *config
            ((config->sda_pincm_function & ~IOMUX_PINCM_PF_MASK) == 0U);
 }
 
-static void hal_i2c_target_begin_from_status(void) {
-    const uint32_t status = g_i2c->SLAVE.SSR;
-
-    if ((status & I2C_SSR_RXMODE_SET) != 0U) {
-        hal_i2c_target_engine_begin_receive(&g_engine);
-    } else if ((status & I2C_SSR_TXMODE_SET) != 0U) {
-        hal_i2c_target_engine_begin_transmit(&g_engine);
-    } else {
-        ++g_error_count;
-        hal_i2c_target_engine_abort(&g_engine);
-    }
-
-    /* Restore the manual ACK response used for the next target-receive byte. */
-    g_i2c->SLAVE.SACKCTL = I2C_SACKCTL_ACKOEN_ENABLE;
+static void hal_i2c_target_handle_start(void) {
+    /* SSTART precedes the address/direction bits; reset only transaction state. */
+    hal_i2c_target_engine_abort(&g_engine);
 }
 
 static void hal_i2c_target_begin_if_start_pending(void) {
     if ((g_i2c->CPU_INT.RIS & I2C_CPU_INT_RIS_SSTART_SET) != 0U) {
-        hal_i2c_target_begin_from_status();
+        hal_i2c_target_handle_start();
         /* SSTART remains pending behind a higher-priority data event. */
         g_start_prehandled = true;
     }
@@ -65,9 +55,7 @@ static void hal_i2c_target_receive_byte(void) {
 
     hal_i2c_target_begin_if_start_pending();
     if (hal_i2c_target_engine_direction(&g_engine) != HAL_I2C_TARGET_ENGINE_RECEIVE) {
-        ++g_error_count;
-        g_i2c->SLAVE.SACKCTL = I2C_SACKCTL_ACKOEN_ENABLE | I2C_SACKCTL_ACKOVAL_ENABLE;
-        return;
+        hal_i2c_target_engine_begin_receive(&g_engine);
     }
 
     /* I2C_ERR_08: RX FIFO needs two module clocks after SRXDONE. */
@@ -77,22 +65,20 @@ static void hal_i2c_target_receive_byte(void) {
     value = (uint8_t)(g_i2c->SLAVE.SRXDATA & I2C_SRXDATA_VALUE_MASK);
     if (!hal_i2c_target_engine_receive(&g_engine, value)) {
         ++g_error_count;
-        g_i2c->SLAVE.SACKCTL = I2C_SACKCTL_ACKOEN_ENABLE | I2C_SACKCTL_ACKOVAL_ENABLE;
-        return;
     }
-
-    /* Manual ACK keeps RXDONE usable and bounds per-byte ISR work. */
-    g_i2c->SLAVE.SACKCTL = I2C_SACKCTL_ACKOEN_ENABLE;
 }
 
 static void hal_i2c_target_transmit_byte(void) {
-    hal_i2c_target_begin_if_start_pending();
-    if (hal_i2c_target_engine_direction(&g_engine) != HAL_I2C_TARGET_ENGINE_TRANSMIT) {
-        ++g_error_count;
+    if ((g_i2c->SLAVE.SSR & I2C_SSR_TREQ_SET) == 0U) {
         return;
     }
 
-    /* STXEMPTY is enabled only for TREQ, so this is a non-speculative byte. */
+    hal_i2c_target_begin_if_start_pending();
+    if (hal_i2c_target_engine_direction(&g_engine) != HAL_I2C_TARGET_ENGINE_TRANSMIT) {
+        hal_i2c_target_engine_begin_transmit(&g_engine);
+    }
+
+    /* TREQ guarantees that this byte cannot become stale after the final NACK. */
     g_i2c->SLAVE.STXDATA = hal_i2c_target_engine_transmit(&g_engine);
 }
 
@@ -100,9 +86,6 @@ static void hal_i2c_target_abort(void) {
     ++g_error_count;
     hal_i2c_target_engine_abort(&g_engine);
     g_start_prehandled = false;
-
-    /* If receiver flow control is holding SCL low, release it with a NACK. */
-    g_i2c->SLAVE.SACKCTL = I2C_SACKCTL_ACKOEN_ENABLE | I2C_SACKCTL_ACKOVAL_ENABLE;
 }
 
 bool hal_i2c_target_init(const hal_i2c_target_config_t *config, lib_regmap_t *regmap) {
@@ -121,9 +104,11 @@ bool hal_i2c_target_init(const hal_i2c_target_config_t *config, lib_regmap_t *re
     hal_power_wait_after_enable();
 
     IOMUX->SECCFG.PINCM[config->scl_pincm_index] =
-        config->scl_pincm_function | IOMUX_PINCM_PC_CONNECTED | IOMUX_PINCM_HIZ1_ENABLE;
+        config->scl_pincm_function | IOMUX_PINCM_PC_CONNECTED |
+        IOMUX_PINCM_INENA_ENABLE | IOMUX_PINCM_HIZ1_ENABLE;
     IOMUX->SECCFG.PINCM[config->sda_pincm_index] =
-        config->sda_pincm_function | IOMUX_PINCM_PC_CONNECTED | IOMUX_PINCM_HIZ1_ENABLE;
+        config->sda_pincm_function | IOMUX_PINCM_PC_CONNECTED |
+        IOMUX_PINCM_INENA_ENABLE | IOMUX_PINCM_HIZ1_ENABLE;
 
     g_i2c->CLKSEL = I2C_CLKSEL_BUSCLK_SEL_ENABLE;
     g_i2c->CLKDIV = I2C_CLKDIV_RATIO_DIV_BY_1;
@@ -136,7 +121,8 @@ bool hal_i2c_target_init(const hal_i2c_target_config_t *config, lib_regmap_t *re
                         I2C_SCTR_RXFULL_ON_RREQ_DISABLE |
                         I2C_SCTR_EN_DEFHOSTADR_DISABLE | I2C_SCTR_EN_ALRESPADR_DISABLE |
                         I2C_SCTR_EN_DEFDEVADR_DISABLE | I2C_SCTR_SWUEN_DISABLE;
-    g_i2c->SLAVE.SACKCTL = I2C_SACKCTL_ACKOEN_ENABLE;
+    /* Automatic ACK permits the target state machine to acknowledge each byte. */
+    g_i2c->SLAVE.SACKCTL = 0U;
     g_i2c->CPU_INT.IMASK = 0U;
     g_i2c->CPU_INT.ICLR = HAL_I2C_TARGET_INTERRUPT_MASK;
     g_i2c->CPU_INT.IMASK = HAL_I2C_TARGET_INTERRUPT_MASK;
@@ -174,11 +160,14 @@ void I2C1_IRQHandler(void) {
         case I2C_CPU_INT_IIDX_STAT_STXEMPTY:
             hal_i2c_target_transmit_byte();
             break;
+        case I2C_CPU_INT_IIDX_STAT_STXDONEFG:
+            hal_i2c_target_transmit_byte();
+            break;
         case I2C_CPU_INT_IIDX_STAT_SSTARTFG:
             if (g_start_prehandled) {
                 g_start_prehandled = false;
             } else {
-                hal_i2c_target_begin_from_status();
+                hal_i2c_target_handle_start();
             }
             break;
         case I2C_CPU_INT_IIDX_STAT_SSTOPFG:

@@ -1,11 +1,11 @@
 # I2C register-map contract
 
-**Status:** Phase 2 target-source slice. `lib_regmap` and the register-free
-target transaction engine are host-tested; `hal_i2c_target` and
-`app/i2c_regmap_demo` build for the C1106 but have not yet been accepted on a
-physical bus. The source configuration selects I2C1 target address `0x42` and
-an initial 100 kHz external-controller fixture; this is not yet a claimed
-on-target interface or a supported field bus.
+**Status:** Phase 2 target slice. `lib_regmap` and the register-free target
+transaction engine are host-tested. The C1106 target at I2C1 address `0x42`
+has also passed initial 100 kHz Raspberry Pi I2C_RDWR pointer-write,
+repeated-start-read, and current-address-read checks. Negative/recovery
+characterization and the documented `i2ctransfer` fixture remain pending, so
+this is not yet a supported field bus.
 
 ## Wire protocol
 
@@ -160,14 +160,15 @@ snapshot or command timing.
 
 ## Deferred hardware gate
 
-The C1106 target source now implements the transaction boundaries above:
+The C1106 target source implements the transaction boundaries above:
 `START` begins a receive or read snapshot; a repeated `START` discards a short
 address phase and begins the next direction; `STOP` and error paths release the
-read snapshot. The target uses manual receive ACKs and waits two module clocks
-after `SRXDONE` before reading RX data (I2C_ERR_08). It never toggles target
-`ACTIVE` after initialization (I2C_ERR_05), has no low-power target wakeup
-(`SWUEN` is disabled for I2C_ERR_04), and requires controller transfers at
-100 kHz or above with a terminating STOP (I2C_ERR_09/10).
+read snapshot. It uses automatic receive ACKs and waits two module clocks after
+`SRXDONE` before reading RX data (I2C_ERR_08); target-transmit bytes are paced
+by the hardware `TREQ` state. It never toggles target `ACTIVE` after
+initialization (I2C_ERR_05), has no low-power target wakeup (`SWUEN` is
+disabled for I2C_ERR_04), and requires controller transfers at 100 kHz or
+above with a terminating STOP (I2C_ERR_09/10).
 
 `hal_i2c_controller` remains deferred. Before the target can be called
 supported, the documented external-master fixture must verify address

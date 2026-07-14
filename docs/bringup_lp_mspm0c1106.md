@@ -194,11 +194,13 @@ I2C pair:
 | SCL | PB2 | `PINCM11`, `I2C1_SCL` | 9 |
 | SDA | PB3 | `PINCM12`, `I2C1_SDA` | 10 |
 
-The EVM schematic marks the I2C pull-up footprints R3 and R11 DNC. Before
-connecting a Raspberry Pi or another controller, use one external 3.3 V
-pull-up pair and a common ground. Do not put 5 V on either I2C signal or on the
-3.3 V rail. The fixture record must name the controller, operating system,
-`i2c-tools` version, pull-up value/location, measured or justified bus speed,
+The EVM schematic marks the I2C pull-up footprints R3 and R11 DNC. A fixture
+therefore needs one 3.3 V pull-up pair and a common ground. The Raspberry Pi 4
+I2C1 fixture already provides that pair through the board's fixed 1.8 kOhm
+pull-ups on GPIO2/GPIO3: do **not** add a parallel 10 kOhm pair. A different
+controller must provide one suitable pair. Do not put 5 V on either I2C signal
+or on the 3.3 V rail. The fixture record must name the controller, operating
+system, tool version, pull-up value/location, measured or justified bus speed,
 and exact commands before target acceptance is claimed.
 
 The C1106 has no ROM BSL: a UART/I2C field-update path would instead be a
@@ -207,20 +209,65 @@ such firmware, so there is no safe generic BSL probe to run. J101 exposes the
 XDS110 reset/BSL-invoke signals and J3/S1 drives PA18, but those signals only
 matter after a deliberately designed flash BSL implements an invocation policy.
 
-### I2C target source slice (not hardware acceptance)
+### I2C target initial hardware acceptance
 
 `app/i2c_regmap_demo` now builds a C1106 I2C1 target at 7-bit address `0x42`.
 It exposes device information at `0x0000`, target diagnostics at `0x0300`, and
 the read-only crash image at `0x0400`. The source uses open-drain PB2/PB3,
-target clock stretching, manual receive ACK, and an initial 100 kHz controller
-fixture. It disables target low-power wake (`SWUEN`) and never changes target
-`ACTIVE` after initialization in accordance with the C1106 I2C errata.
+target clock stretching, automatic receive ACK, and an initial 100 kHz
+controller fixture. It disables target low-power wake (`SWUEN`) and never
+changes target `ACTIVE` after initialization in accordance with the C1106 I2C
+errata.
 
-This is a source/build milestone only. No I2C target image has been programmed
-and no external controller has been connected or tested. The first hardware
-session must use the 3.3 V external pull-up pair described above, send STOP at
-the end of every transfer, and record the fixture before treating the interface
-as supported.
+On 2026-07-14, the programmed target was connected to Raspberry Pi 4 I2C1 as
+follows:
+
+| Signal | C1106 LaunchPad | Raspberry Pi header |
+|---|---|---|
+| SCL | PB2, BoosterPack position 9 | GPIO3, pin 5 |
+| SDA | PB3, BoosterPack position 10 | GPIO2, pin 3 |
+| GND | board ground | pin 6 |
+
+The Pi host was `pi4-udc-setup`, Linux `6.18.34+rpt-rpi-v8`. `/dev/i2c-1` was
+present; its device-tree clock setting was `0x000186A0` (100 kHz), GPIO2 and
+GPIO3 reported their I2C alternate functions with pull-ups enabled, and
+`smbus2` was version `0.4.3`. The following Python I2C_RDWR acceptance sequence
+passed at address `0x42` after a MAIN-only OpenOCD flash/verify:
+
+```python
+from smbus2 import SMBus, i2c_msg
+
+ADDRESS = 0x42
+
+def read_register(bus, address, count):
+    pointer = i2c_msg.write(ADDRESS, [address >> 8, address & 0xff])
+    data = i2c_msg.read(ADDRESS, count)
+    bus.i2c_rdwr(pointer, data)
+    return bytes(data)
+
+with SMBus(1) as bus:
+    build = read_register(bus, 0x0000, 8)
+    status = read_register(bus, 0x0300, 8)
+    crash = read_register(bus, 0x0400, 24)
+    bus.i2c_rdwr(i2c_msg.write(ADDRESS, [0x00, 0x00]))
+    current = i2c_msg.read(ADDRESS, 8)
+    bus.i2c_rdwr(current)
+
+assert build == bytes(8)
+assert int.from_bytes(status[:4], "big") == 0
+assert crash[:4] == bytes([1, 0, 0, 2])
+assert bytes(current) == bytes(8)
+```
+
+The observed values were device info `0000000000000000`, status
+`0000000000000000`, crash image
+`01000002000000000000001d000000000000000000000000`, and current-address
+read `0000000000000000`. This proves the positive target data path, including a
+repeated START and a separate current-address read. The operator subsequently
+ran `i2cdetect -r -y 1` on the same Pi and it reported `42` in the `0x40` row.
+It does not yet complete the negative/recovery suite, a physical
+bus-capacitance measurement, 400 kHz testing, or the planned `i2ctransfer`
+fixture.
 
 Before UniFlash was installed, this WSL host had no TI UniFlash/DSS executable
 (`dslite` or `uniflash`). `openjdk-17-jre` is only a runtime prerequisite; it
