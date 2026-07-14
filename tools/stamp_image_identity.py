@@ -33,7 +33,7 @@ IDENTITY_CRC_SIZE = 4
 IDENTITY_FLAG_SOURCE_DIRTY = 1 << 0
 IDENTITY_FLAG_DEBUG = 1 << 1
 IDENTITY_FLAGS_ALLOWED = IDENTITY_FLAG_SOURCE_DIRTY | IDENTITY_FLAG_DEBUG
-IDENTITY_HEADER = struct.Struct("<4sHHBBHII16s28s")
+IDENTITY_HEADER = struct.Struct("<4sHHBBHII16sI24s")
 
 
 @dataclass(frozen=True)
@@ -282,7 +282,13 @@ def encode_source_id(source_id: str) -> bytes:
 
 
 def build_identity(
-    version_major: int, version_minor: int, source_id: bytes, flags: int, image_span: int, crc32: int
+    version_major: int,
+    version_minor: int,
+    source_id: bytes,
+    flags: int,
+    image_span: int,
+    content_length: int,
+    crc32: int,
 ) -> bytes:
     return IDENTITY_HEADER.pack(
         IDENTITY_MAGIC,
@@ -294,7 +300,8 @@ def build_identity(
         image_span,
         crc32,
         source_id,
-        b"\xff" * 28,
+        content_length,
+        b"\xff" * 24,
     )
 
 
@@ -302,12 +309,22 @@ def crc32_iso_hdlc(data: bytes) -> int:
     return zlib.crc32(data) & 0xFFFFFFFF
 
 
-def decode_identity(identity: bytes, layout: ImageLayout) -> Tuple[int, int, int, int, bytes, int]:
+def decode_identity(identity: bytes, layout: ImageLayout) -> Tuple[int, int, int, int, bytes, int, int]:
     if len(identity) != IDENTITY_SIZE:
         fail("image identity has an invalid size")
-    magic, format_version, header_size, major, minor, flags, span, crc32, source_id, reserved = (
-        IDENTITY_HEADER.unpack(identity)
-    )
+    (
+        magic,
+        format_version,
+        header_size,
+        major,
+        minor,
+        flags,
+        span,
+        crc32,
+        source_id,
+        content_length,
+        reserved,
+    ) = IDENTITY_HEADER.unpack(identity)
     if magic != IDENTITY_MAGIC:
         fail("image identity magic is invalid")
     if format_version != IDENTITY_FORMAT_VERSION or header_size != IDENTITY_SIZE:
@@ -316,6 +333,8 @@ def decode_identity(identity: bytes, layout: ImageLayout) -> Tuple[int, int, int
         fail("image identity contains unsupported flags")
     if span != layout.identity_end - layout.flash_origin:
         fail("image identity flash span does not match the linker reservation")
+    if content_length != len(layout.coverage):
+        fail("image identity content length does not match __data_load_end")
     if reserved != b"\xff" * len(reserved):
         fail("image identity reserved bytes are not erased-value 0xff")
     source_end = source_id.find(b"\0")
@@ -330,15 +349,16 @@ def decode_identity(identity: bytes, layout: ImageLayout) -> Tuple[int, int, int
     expected_crc32 = crc32_iso_hdlc(layout.coverage + bytes(crc_input_identity))
     if crc32 != expected_crc32:
         fail(f"image identity CRC32 is 0x{crc32:08x}; expected 0x{expected_crc32:08x}")
-    return major, minor, flags, crc32, source_text, span
+    return major, minor, flags, crc32, source_text, span, content_length
 
 
 def verify_elf(image: Elf32Image, layout: ImageLayout) -> bytes:
     identity = bytes(image.data[layout.identity_offset : layout.identity_offset + layout.identity_size])
-    major, minor, flags, crc32, source_id, span = decode_identity(identity, layout)
+    major, minor, flags, crc32, source_id, span, content_length = decode_identity(identity, layout)
     print(
         f"{image.path}: image identity OK: version={major:02x}.{minor:02x} "
-        f"source={source_id.decode('ascii')} flags=0x{flags:04x} span=0x{span:x} crc32=0x{crc32:08x}"
+        f"source={source_id.decode('ascii')} flags=0x{flags:04x} span=0x{span:x} "
+        f"content=0x{content_length:x} crc32=0x{crc32:08x}"
     )
     return identity
 
@@ -436,11 +456,23 @@ def stamp(args: argparse.Namespace) -> int:
     )
     source_id = encode_source_id(args.source_id)
     identity_without_crc = build_identity(
-        major, minor, source_id, flags, layout.identity_end - layout.flash_origin, 0
+        major,
+        minor,
+        source_id,
+        flags,
+        layout.identity_end - layout.flash_origin,
+        len(layout.coverage),
+        0,
     )
     crc32 = crc32_iso_hdlc(layout.coverage + identity_without_crc)
     identity = build_identity(
-        major, minor, source_id, flags, layout.identity_end - layout.flash_origin, crc32
+        major,
+        minor,
+        source_id,
+        flags,
+        layout.identity_end - layout.flash_origin,
+        len(layout.coverage),
+        crc32,
     )
     image.write_identity(layout, identity)
     image.save()

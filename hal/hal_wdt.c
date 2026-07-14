@@ -1,23 +1,15 @@
 #include "hal_wdt.h"
 
 #include "device.h"
+#include "hal_power.h"
 
-#define HAL_WDT_POWER_SETTLE_CYCLES UINT32_C(64)
 #define HAL_WDT_RESTART_KEY UINT32_C(0x00A7)
-
-static void hal_wdt_wait_after_power_enable(void) {
-    uint32_t cycle;
-
-    for (cycle = 0U; cycle < HAL_WDT_POWER_SETTLE_CYCLES; ++cycle) {
-        __NOP();
-    }
-}
 
 bool hal_wdt_init(void) {
     WWDT0->GPRCM.RSTCTL = WWDT_RSTCTL_KEY_UNLOCK_W | WWDT_RSTCTL_RESETSTKYCLR_CLR |
                           WWDT_RSTCTL_RESETASSERT_ASSERT;
     WWDT0->GPRCM.PWREN = WWDT_PWREN_KEY_UNLOCK_W | WWDT_PWREN_ENABLE_ENABLE;
-    hal_wdt_wait_after_power_enable();
+    hal_power_wait_after_enable();
 
     /* Halt the counter during an SWD stop; it otherwise runs through WFI. */
     WWDT0->PDBGCTL = WWDT_PDBGCTL_FREE_STOP;

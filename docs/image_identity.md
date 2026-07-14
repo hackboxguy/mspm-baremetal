@@ -27,7 +27,8 @@ stored as two BCD bytes; for example, `VERSION=01.02` encodes `0x01, 0x02`.
 | `0x0C` | 4 | image span | Bytes from MAIN-flash origin through the identity end (`0x10000` for C1106) |
 | `0x10` | 4 | CRC-32 | CRC-32/ISO-HDLC; this field is zero during calculation |
 | `0x14` | 16 | source ID | ASCII Git revision, normally 12 hex characters, NUL-padded |
-| `0x24` | 28 | reserved | Always `0xFF` |
+| `0x24` | 4 | content length | Defined-content length: `__data_load_end - ORIGIN(FLASH)` |
+| `0x28` | 24 | reserved | Always `0xFF` |
 
 The source ID comes from `git rev-parse --short=12 HEAD`; its dirty bit comes
 from `git status --porcelain`. Both can be overridden deliberately with
@@ -50,7 +51,8 @@ The erased gap between `__data_load_end` and `0x0000FFC0` is deliberately
 excluded. The BIN still serializes that gap as `0xFF`, while the sparse ELF and
 HEX do not manufacture loadable bytes there. This gives the same identity for
 the canonical ELF, the derivative BIN/HEX files, and a target programmed from
-the ELF.
+the ELF. The stored content length gives an on-target verifier the exact end
+of the first range without requiring linker symbols or an ELF file.
 
 Build and validate locally:
 

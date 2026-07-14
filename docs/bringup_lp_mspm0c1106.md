@@ -103,7 +103,15 @@ stops the watchdog under SWD so interactive debugging does not cause a reset.
 `fault_record_test` is a dedicated manual-test application. It first triggers
 one `udf #0` instruction, which is a HardFault on Cortex-M0+, then recognizes
 the valid retained record after reset and remains healthy instead of faulting
-again.
+again. In a release build the retained-fault state has a distinct 125 ms red
+LED toggle cadence; debug additionally prints its retained-fault banner.
+
+The test intentionally does not trigger again while a valid retained record
+exists. Power-cycle before a repeat attempt, but do not assume that this clears
+`.noinit`: power-cycle retention is still an open Phase 1 check. If the record
+survives, the app will remain in the retained-fault state rather than erase
+diagnostic evidence; repeat testing then needs the future Phase 2 acknowledge
+semantics or an explicitly controlled debugger SRAM clear.
 
 ```sh
 make OPENOCD=/tmp/openocd-source/src/openocd \
@@ -115,6 +123,26 @@ banner. A reset-halted record read at `0x2000007C` returned
 `43525348 00200001 00000001 0000001d 00000002 00000140 01000000 34a71d15`:
 valid magic and CRC, sequence 1, software CPU-reset cause `0x1D`, HardFault
 reason 2, the stacked `udf` PC `0x00000140`, and xPSR `0x01000000`.
+
+## 2026-07-14 — hardened format-2 HardFault capture
+
+The format-2 fault path validates the hardware stack-frame address in its naked
+handler and snapshots PC/xPSR before switching to a fresh MSP for C code. This
+matters when a normal near-top-of-SRAM exception frame would otherwise be
+overwritten by nested C calls on that fresh stack; it also leaves invalid frames
+as the documented zero-PC/xPSR sentinel.
+
+The updated debug `fault_record_test` was programmed and its retained record
+was read with the core reset-halted after its one deliberate `udf #0`:
+
+```text
+43525348 00200002 00000001 0000001d 00000302 00000174 01000000 f4dc8fbb
+```
+
+The record has format/size `0x00200002`, sequence 1, CPU-software reset cause
+`0x1D`, and a packed HardFault reason 2 plus active IPSR 3 (`0x00000302`). Its
+PC points to the test `udf` (`0x00000174`), its xPSR is `0x01000000`, and its
+CRC validates. This closes the format-2 fault-frame capture gate.
 
 ## 2026-07-13 — canonical image identity
 
@@ -169,10 +197,10 @@ MAIN-only binary fallback comparison ended with `** Verified OK **`.
 
 ## Troubleshooting
 
-- Before the Phase 1 fault recorder is implemented, every unhandled exception
-  enters `Default_Handler`, a WFI loop. A frozen LED can therefore be a fault,
-  not a healthy idle loop. Attach with SWD, halt the target, and inspect the PC
-  before assuming a timer or GPIO problem.
+- Unhandled exceptions capture a retained crash record and request a reset. A
+  frozen LED can still be an early initialization failure rather than a healthy
+  idle loop. Attach with SWD, halt the target, and inspect the PC and
+  `g_crash_record` before assuming a timer or GPIO problem.
 
 ## Remaining Phase 1 evidence
 

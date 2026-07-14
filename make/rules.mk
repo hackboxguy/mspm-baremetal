@@ -22,20 +22,22 @@ IMAGE_IDENTITY_LAYOUT_ARGS := --flash-origin $(FLASH_ORIGIN) --flash-length $(FL
 
 APP_SRCS := $(wildcard app/$(APP)/*.c)
 BOARD_SRCS := $(wildcard board/$(BOARD)/*.c)
+ARCH_SRCS := $(wildcard arch/*.c)
 HAL_SRCS := $(wildcard hal/*.c)
 LIB_SRCS := $(wildcard lib/*.c)
 DEVICE_SRCS := $(DEVICE_DIR)/startup.c $(DEVICE_DIR)/image_identity.c
-C_SRCS := $(APP_SRCS) $(BOARD_SRCS) $(HAL_SRCS) $(LIB_SRCS) $(DEVICE_SRCS)
+C_SRCS := $(APP_SRCS) $(BOARD_SRCS) $(ARCH_SRCS) $(HAL_SRCS) $(LIB_SRCS) $(DEVICE_SRCS)
 OBJECTS := $(addprefix $(BUILD_DIR)/,$(C_SRCS:.c=.o))
 DEPS := $(OBJECTS:.o=.d)
 
 FORMAT_SOURCES := $(wildcard app/*/*.c) $(wildcard app/*/*.h) \
+	$(wildcard arch/*.c) $(wildcard arch/*.h) \
 	$(wildcard board/*/*.c) $(wildcard board/*/*.h) \
 	$(wildcard device/*/*.c) $(wildcard device/*/*.h) \
 	$(wildcard hal/*.c) $(wildcard hal/*.h) $(wildcard lib/*.c) \
 	$(wildcard lib/*.h) $(wildcard tests/*.c)
 
-CPPFLAGS := -I$(PROJ_ROOT)/lib $(DEVICE_CPPFLAGS) $(VARIANT_CPPFLAGS)
+CPPFLAGS := -I$(PROJ_ROOT)/arch -I$(PROJ_ROOT)/lib $(DEVICE_CPPFLAGS) $(VARIANT_CPPFLAGS)
 CFLAGS := $(COMMON_CFLAGS) $(CPU_FLAGS) $(OPTIMIZATION)
 LDFLAGS := $(CPU_FLAGS) -nostdlib -nostartfiles -nodefaultlibs \
 	-Wl,--gc-sections -Wl,--build-id=none -Wl,-Map,$(MAP) \
@@ -50,6 +52,7 @@ $(OUT_DIR):
 
 .PHONY: image-identity-force
 
+# The source identifier and dirty flag are build inputs, so always restamp.
 image-identity-force:
 
 $(ELF): image-identity-force $(OBJECTS) $(LINKER_SCRIPT) $(IMAGE_IDENTITY_TOOL) | $(OUT_DIR)

@@ -2,24 +2,16 @@
 
 #include <stddef.h>
 
+#include "arch_critical.h"
 #include "device.h"
+#include "hal_power.h"
 
-#define HAL_UART_POWER_STARTUP_CPU_CYCLES UINT32_C(64)
 #define HAL_UART_PINCM_COUNT UINT32_C(251)
 #define HAL_UART_TX_PRIORITY UINT32_C(2)
 #define HAL_UART_DIVISOR_FRACTION_SCALE UINT32_C(64)
 
 static lib_ringbuf_t *g_uart0_tx_queue;
 static bool g_uart0_tx_initialized;
-
-static void hal_uart_wait_power_startup(void) {
-    uint32_t cycle;
-
-    /* The C-Series TRM requires at least four ULPCLK cycles after PWREN. */
-    for (cycle = 0U; cycle < HAL_UART_POWER_STARTUP_CPU_CYCLES; ++cycle) {
-        __NOP();
-    }
-}
 
 static bool hal_uart_baud_divisor(uint32_t clock_hz, uint32_t baud_rate,
                                   uint32_t *divisor) {
@@ -45,6 +37,22 @@ static bool hal_uart_baud_divisor(uint32_t clock_hz, uint32_t baud_rate,
     return true;
 }
 
+static void hal_uart0_tx_enable_interrupt(void) {
+    const arch_critical_state_t state = arch_critical_enter();
+
+    UART0->CPU_INT.IMASK |= UART_CPU_INT_IMASK_TXINT_SET;
+    /* Kick the first transfer; later requests are FIFO-level driven. */
+    UART0->CPU_INT.ISET = UART_CPU_INT_ISET_TXINT_SET;
+    arch_critical_exit(state);
+}
+
+static void hal_uart0_tx_disable_interrupt(void) {
+    const arch_critical_state_t state = arch_critical_enter();
+
+    UART0->CPU_INT.IMASK &= ~UART_CPU_INT_IMASK_TXINT_MASK;
+    arch_critical_exit(state);
+}
+
 static void hal_uart0_tx_service(void) {
     bool queue_empty = false;
     uint8_t byte;
@@ -59,7 +67,7 @@ static void hal_uart0_tx_service(void) {
     }
 
     if (queue_empty) {
-        UART0->CPU_INT.IMASK &= ~UART_CPU_INT_IMASK_TXINT_MASK;
+        hal_uart0_tx_disable_interrupt();
     }
 }
 
@@ -77,9 +85,7 @@ bool hal_uart0_tx_init(const hal_uart0_tx_config_t *config, lib_ringbuf_t *queue
     UART0->GPRCM.RSTCTL = UART_RSTCTL_KEY_UNLOCK_W | UART_RSTCTL_RESETSTKYCLR_CLR |
                           UART_RSTCTL_RESETASSERT_ASSERT;
     UART0->GPRCM.PWREN = UART_PWREN_KEY_UNLOCK_W | UART_PWREN_ENABLE_ENABLE;
-    __DSB();
-    __ISB();
-    hal_uart_wait_power_startup();
+    hal_power_wait_after_enable();
 
     IOMUX->SECCFG.PINCM[config->tx_pincm_index] =
         config->tx_pincm_function | IOMUX_PINCM_PC_CONNECTED;
@@ -120,9 +126,7 @@ uint32_t hal_uart0_tx_write(const uint8_t *data, uint32_t length) {
     }
 
     if (accepted != 0U) {
-        UART0->CPU_INT.IMASK |= UART_CPU_INT_IMASK_TXINT_SET;
-        /* Kick the first transfer; later requests are FIFO-level driven. */
-        UART0->CPU_INT.ISET = UART_CPU_INT_ISET_TXINT_SET;
+        hal_uart0_tx_enable_interrupt();
     }
 
     return accepted;

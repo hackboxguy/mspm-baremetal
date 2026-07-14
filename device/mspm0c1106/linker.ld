@@ -12,6 +12,8 @@ MEMORY
 
 __stack_top = ORIGIN(SRAM) + LENGTH(SRAM);
 __stack_limit = __stack_top - STACK_SIZE;
+__sram_start = ORIGIN(SRAM);
+__crash_stack_frame_limit = __stack_top - 32;
 __image_identity_start = ORIGIN(FLASH) + LENGTH(FLASH) - IMAGE_ID_SIZE;
 
 SECTIONS

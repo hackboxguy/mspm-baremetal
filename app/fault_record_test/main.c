@@ -3,8 +3,25 @@
 #include "hal_wdt.h"
 #include "lib_debug.h"
 
+#define FAULT_RECORD_TEST_RETAINED_BLINK_PERIOD_MS UINT32_C(125)
+
 static void fault_record_test_wait_healthy(void) {
     for (;;) {
+        hal_wdt_kick();
+        hal_timer_wait_for_interrupt();
+    }
+}
+
+static void fault_record_test_indicate_retained_fault(void) {
+    uint32_t next_toggle_ms =
+        hal_timer_now_ms() + FAULT_RECORD_TEST_RETAINED_BLINK_PERIOD_MS;
+
+    for (;;) {
+        if (hal_timer_deadline_reached(next_toggle_ms)) {
+            board_led_red_toggle();
+            next_toggle_ms =
+                hal_timer_now_ms() + FAULT_RECORD_TEST_RETAINED_BLINK_PERIOD_MS;
+        }
         hal_wdt_kick();
         hal_timer_wait_for_interrupt();
     }
@@ -24,7 +41,7 @@ int main(void) {
 
     if (board_crash_has_fault()) {
         DBG_WRITE_LITERAL("mspm-baremetal: retained hard fault\r\n");
-        fault_record_test_wait_healthy();
+        fault_record_test_indicate_retained_fault();
     }
 
     DBG_WRITE_LITERAL("mspm-baremetal: triggering hard fault\r\n");

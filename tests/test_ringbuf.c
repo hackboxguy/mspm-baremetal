@@ -125,13 +125,14 @@ static void test_crash_record_rejects_garbage_and_preserves_fault(void) {
     assert(record.sequence == 0U);
     assert(record.reset_cause == UINT32_C(0x0D));
 
-    lib_crash_capture(&record, LIB_CRASH_REASON_HARDFAULT, UINT32_C(0x12345678),
-                      UINT32_C(0x21000003));
+    lib_crash_capture(&record, LIB_CRASH_REASON_HARDFAULT, UINT32_C(3),
+                      UINT32_C(0x12345678), UINT32_C(0x21000003));
     assert(lib_crash_is_valid(&record));
     assert(lib_crash_has_fault(&record));
     assert(record.sequence == UINT32_C(1));
     assert(record.reset_cause == UINT32_C(0x0D));
-    assert(record.reason == (uint32_t)LIB_CRASH_REASON_HARDFAULT);
+    assert(lib_crash_reason(&record) == LIB_CRASH_REASON_HARDFAULT);
+    assert(lib_crash_exception_number(&record) == UINT32_C(3));
     assert(record.stacked_pc == UINT32_C(0x12345678));
     assert(record.stacked_xpsr == UINT32_C(0x21000003));
 
@@ -149,18 +150,19 @@ static void test_crash_record_rejects_garbage_and_preserves_fault(void) {
 static void test_crash_record_restarts_sequence_after_invalid_record(void) {
     lib_crash_record_t record = {0};
 
-    lib_crash_capture(&record, LIB_CRASH_REASON_NMI, UINT32_C(0x100),
+    lib_crash_capture(&record, LIB_CRASH_REASON_NMI, UINT32_C(2), UINT32_C(0x100),
                       UINT32_C(0x01000002));
     assert(lib_crash_is_valid(&record));
     assert(record.sequence == UINT32_C(1));
 
     record.magic = 0U;
-    lib_crash_capture(&record, LIB_CRASH_REASON_UNEXPECTED_EXCEPTION, UINT32_C(0x200),
-                      UINT32_C(0x01000003));
+    lib_crash_capture(&record, LIB_CRASH_REASON_UNEXPECTED_EXCEPTION, UINT32_C(31),
+                      UINT32_C(0x200), UINT32_C(0x01000003));
     assert(lib_crash_is_valid(&record));
     assert(record.sequence == UINT32_C(1));
     assert(record.reset_cause == 0U);
-    assert(record.reason == (uint32_t)LIB_CRASH_REASON_UNEXPECTED_EXCEPTION);
+    assert(lib_crash_reason(&record) == LIB_CRASH_REASON_UNEXPECTED_EXCEPTION);
+    assert(lib_crash_exception_number(&record) == UINT32_C(31));
 }
 
 int main(void) {

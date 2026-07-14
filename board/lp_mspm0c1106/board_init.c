@@ -42,6 +42,7 @@ board_init_result_t board_init(void) {
         return BOARD_INIT_GPIO_FAILURE;
     }
 
+    /* UART0 TX is PB6/PINCM17, so GPIOB must be reset and powered first. */
     hal_gpio_port_reset_enable(GPIOB_BASE);
     if (!lib_ringbuf_init(&g_uart_tx_queue, g_uart_tx_storage,
                           BOARD_UART_TX_QUEUE_CAPACITY)) {

@@ -49,6 +49,13 @@ static void lib_crash_clear_record(lib_crash_record_t *record) {
     record->integrity_crc32 = 0U;
 }
 
+static uint32_t lib_crash_pack_reason(lib_crash_reason_t reason,
+                                      uint32_t exception_number) {
+    return ((exception_number & LIB_CRASH_EXCEPTION_NUMBER_MASK)
+            << LIB_CRASH_EXCEPTION_NUMBER_SHIFT) |
+           ((uint32_t)reason & LIB_CRASH_REASON_CODE_MASK);
+}
+
 bool lib_crash_is_valid(const lib_crash_record_t *record) {
     if ((record == NULL) || (record->magic != LIB_CRASH_MAGIC) ||
         (record->format_version != LIB_CRASH_FORMAT_VERSION) ||
@@ -60,8 +67,23 @@ bool lib_crash_is_valid(const lib_crash_record_t *record) {
 }
 
 bool lib_crash_has_fault(const lib_crash_record_t *record) {
-    return lib_crash_is_valid(record) &&
-           (record->reason != (uint32_t)LIB_CRASH_REASON_NONE);
+    return lib_crash_reason(record) != LIB_CRASH_REASON_NONE;
+}
+
+lib_crash_reason_t lib_crash_reason(const lib_crash_record_t *record) {
+    if (!lib_crash_is_valid(record)) {
+        return LIB_CRASH_REASON_NONE;
+    }
+
+    return (lib_crash_reason_t)(record->reason & LIB_CRASH_REASON_CODE_MASK);
+}
+
+uint32_t lib_crash_exception_number(const lib_crash_record_t *record) {
+    if (!lib_crash_is_valid(record)) {
+        return 0U;
+    }
+
+    return record->reason >> LIB_CRASH_EXCEPTION_NUMBER_SHIFT;
 }
 
 void lib_crash_note_boot(lib_crash_record_t *record, uint32_t reset_cause) {
@@ -78,7 +100,8 @@ void lib_crash_note_boot(lib_crash_record_t *record, uint32_t reset_cause) {
 }
 
 void lib_crash_capture(lib_crash_record_t *record, lib_crash_reason_t reason,
-                       uint32_t stacked_pc, uint32_t stacked_xpsr) {
+                       uint32_t exception_number, uint32_t stacked_pc,
+                       uint32_t stacked_xpsr) {
     uint32_t sequence = 0U;
     uint32_t reset_cause = 0U;
 
@@ -94,7 +117,7 @@ void lib_crash_capture(lib_crash_record_t *record, lib_crash_reason_t reason,
     lib_crash_clear_record(record);
     record->sequence = sequence + UINT32_C(1);
     record->reset_cause = reset_cause;
-    record->reason = (uint32_t)reason;
+    record->reason = lib_crash_pack_reason(reason, exception_number);
     record->stacked_pc = stacked_pc;
     record->stacked_xpsr = stacked_xpsr;
     lib_crash_commit(record);

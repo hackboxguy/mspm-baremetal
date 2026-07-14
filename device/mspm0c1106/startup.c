@@ -6,6 +6,7 @@
 typedef void (*isr_handler_t)(void);
 
 extern uint8_t __stack_top;
+extern uint8_t __sram_start;
 extern uint8_t __data_load_start;
 extern uint8_t __data_start;
 extern uint8_t __data_end;
@@ -90,13 +91,12 @@ const uintptr_t g_vector_table[] = {
 _Static_assert((sizeof(g_vector_table) / sizeof(g_vector_table[0])) == 48U,
                "MSPM0C1106 has 32 external interrupt vector slots");
 
-__attribute__((noreturn)) void crash_capture_from_stack(const uint32_t *stack_frame,
-                                                        uint32_t reason) {
-    const uint32_t stacked_pc = stack_frame[6];
-    const uint32_t stacked_xpsr = stack_frame[7];
-
-    lib_crash_capture(&g_crash_record, (lib_crash_reason_t)reason, stacked_pc,
-                      stacked_xpsr);
+__attribute__((noreturn)) void crash_capture_from_values(uint32_t reason,
+                                                         uint32_t exception_number,
+                                                         uint32_t stacked_pc,
+                                                         uint32_t stacked_xpsr) {
+    lib_crash_capture(&g_crash_record, (lib_crash_reason_t)reason, exception_number,
+                      stacked_pc, stacked_xpsr);
     __DSB();
     NVIC_SystemReset();
     for (;;) {
@@ -104,23 +104,52 @@ __attribute__((noreturn)) void crash_capture_from_stack(const uint32_t *stack_fr
     }
 }
 
+#define CRASH_STRINGIFY_VALUE_IMPL(value) #value
+#define CRASH_STRINGIFY_VALUE(value) CRASH_STRINGIFY_VALUE_IMPL(value)
+#define CRASH_HANDLER_ASM(reason_code)                                                 \
+    /* Snapshot the frame before the fresh C stack can overwrite it. */                \
+    "mrs r0, msp\n"                                                                    \
+    "movs r3, #3\n"                                                                    \
+    "tst r0, r3\n"                                                                     \
+    "bne 1f\n"                                                                         \
+    "ldr r3, =__sram_start\n"                                                          \
+    "cmp r0, r3\n"                                                                     \
+    "blo 1f\n"                                                                         \
+    "ldr r3, =__crash_stack_frame_limit\n"                                             \
+    "cmp r0, r3\n"                                                                     \
+    "bhi 1f\n"                                                                         \
+    "ldr r2, [r0, #24]\n"                                                              \
+    "ldr r3, [r0, #28]\n"                                                              \
+    "b 2f\n"                                                                           \
+    "1:\n"                                                                             \
+    "movs r2, #0\n"                                                                    \
+    "movs r3, #0\n"                                                                    \
+    "2:\n"                                                                             \
+    "mrs r1, ipsr\n"                                                                   \
+    "movs r0, #" CRASH_STRINGIFY_VALUE(                                                \
+        reason_code) "\n"                                                              \
+                     "movs r4, r3\n"                                                   \
+                     "ldr r3, =__stack_top\n"                                          \
+                     "msr msp, r3\n"                                                   \
+                     "ldr r5, =crash_capture_from_values\n"                            \
+                     "movs r3, r4\n"                                                   \
+                     "bx r5\n"
+
 void NMI_Handler(void) {
-    __asm volatile("mrs r0, msp\n"
-                   "movs r1, #1\n"
-                   "b crash_capture_from_stack\n");
+    __asm volatile(CRASH_HANDLER_ASM(LIB_CRASH_REASON_CODE_NMI));
 }
 
 void HardFault_Handler(void) {
-    __asm volatile("mrs r0, msp\n"
-                   "movs r1, #2\n"
-                   "b crash_capture_from_stack\n");
+    __asm volatile(CRASH_HANDLER_ASM(LIB_CRASH_REASON_CODE_HARDFAULT));
 }
 
 void Default_Handler(void) {
-    __asm volatile("mrs r0, msp\n"
-                   "movs r1, #3\n"
-                   "b crash_capture_from_stack\n");
+    __asm volatile(CRASH_HANDLER_ASM(LIB_CRASH_REASON_CODE_UNEXPECTED_EXCEPTION));
 }
+
+#undef CRASH_HANDLER_ASM
+#undef CRASH_STRINGIFY_VALUE
+#undef CRASH_STRINGIFY_VALUE_IMPL
 
 void Reset_Handler(void) {
     uint8_t *source;

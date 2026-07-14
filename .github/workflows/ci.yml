@@ -39,6 +39,14 @@ jobs:
       - name: Build release UART TX test
         run: make BOARD=lp_mspm0c1106 APP=uart_tx_test DEBUG=off VERSION=01.02
 
+      - name: Explicitly verify image artifacts
+        run: |
+          for app in blink fault_record_test uart_tx_test; do
+            for debug in off on; do
+              make BOARD=lp_mspm0c1106 APP="$app" DEBUG="$debug" VERSION=01.02 identity-check
+            done
+          done
+
       - name: Report release size
         run: make BOARD=lp_mspm0c1106 APP=blink DEBUG=off size
 
@@ -51,6 +59,6 @@ jobs:
       - name: Archive firmware artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: mspm0c1106-blink-artifacts
-          path: output/lp_mspm0c1106/blink/
+          name: mspm0c1106-artifacts
+          path: output/lp_mspm0c1106/
           if-no-files-found: error

@@ -13,6 +13,12 @@ bench-proven; deliberate HardFault capture is also proven. Canonical image
 identity artifact/read-back comparison is also bench-proven. Power-cycle
 retention remains.
 
+`arch/arch_critical.h` owns short PRIMASK critical sections, and `hal_power`
+owns the post-PWREN barrier/delay used by GPIO, UART, and WWDT. The crash record
+is now format 2, captures its active exception number, and has a bench-verified
+HardFault frame snapshot; re-run the deliberate-HardFault test after any future
+fault-path change.
+
 ## Commands
 
 ```sh

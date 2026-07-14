@@ -30,6 +30,10 @@
   The BIN serialises that gap as `0xFF`, matching erased MAIN flash; an
   ELF-programmed target does not write the gap. The exact format and
   read-back procedure are in [image_identity.md](image_identity.md).
+- `lib_crash` records a packed reason code and the active exception number.
+  Its format is CRC-gated and has no public clear/acknowledge operation yet;
+  Phase 2 must define crash-page read-and-acknowledge ownership and reset
+  semantics before exposing it through a register map.
 
 ## Interrupts and concurrency
 
@@ -37,6 +41,10 @@
   Phase 1 blink image uses UART0 at priority 2 and SysTick at priority 3.
   UART0 can pre-empt SysTick; SysTick cannot pre-empt UART0. The UART0 TX SPSC
   producer is the main thread and its consumer is the priority-2 UART0 ISR.
+  The UART TX queue has no ISR producer: a future producer must not run above
+  priority 2 or share this queue without a new concurrency design. UART IMASK
+  updates use a short PRIMASK critical section so future RX/error mask bits
+  cannot be lost to a thread/ISR read-modify-write race.
   No other exception or peripheral interrupt is enabled. Before enabling a
   further interrupt, document its priority, nesting relationship, and every
   producer/consumer pair here.
@@ -54,6 +62,13 @@
 - WWDT0 is owned by `hal_wdt`. It has a 1-second LFCLK period, no closed
   servicing window, runs while the core uses WFI, and stops while SWD halts the
   core. The main-loop health path—not an ISR—services it.
+- Phase 1 uses a deliberate bench policy: failures before watchdog start hold
+  a distinct LED state for inspection; test-app assertion failures may keep
+  kicking the watchdog for the same reason; after watchdog start a normal app
+  that stops kicking resets. Phase 3 product apps must start the watchdog once
+  minimal safety initialization completes, never kick it in a persistent
+  failure state, and use the crash-record sequence counter to cap reset-storm
+  retries before entering a defined safe state.
 - ISR work is bounded.  Register-map page execution context is decided before
   the Phase 2 `lib_regmap` API freezes; command work normally belongs in the
   main loop.
@@ -64,6 +79,7 @@
   BCR/NONMAIN/BSL configuration needs a dedicated production-security plan.
 - Every hardware constant in owned code must trace to `docs/device_facts.md`
   and its primary source or bench record.
-- Before the fault recorder is implemented, `Default_Handler` is a WFI loop.
-  A frozen LED can therefore indicate an exception rather than a healthy idle
-  loop; use the documented SWD procedure to distinguish them.
+- Unhandled exceptions enter the CRC-gated fault recorder, which captures the
+  active exception number and requests a reset. A frozen LED can therefore
+  indicate an early initialization failure rather than a healthy idle loop;
+  use the documented SWD procedure to distinguish them.
