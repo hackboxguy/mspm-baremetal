@@ -19,6 +19,12 @@ is now format 2, captures its active exception number, and has a bench-verified
 HardFault frame snapshot; re-run the deliberate-HardFault test after any future
 fault-path change.
 
+Phase 2 has started with host-tested `lib_buildinfo`, `lib_boot`, `lib_regmap`,
+and a safe `lib_crash` diagnostics-page encoder. The I2C target/controller
+HALs and demo remain blocked on the recorded C1106 I2C pin, peripheral, errata,
+and bus-fixture evidence; see `docs/i2c_register_map.md` for the frozen
+portable transaction contract.
+
 ## Commands
 
 ```sh

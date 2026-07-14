@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #define LIB_CRASH_FORMAT_VERSION UINT16_C(2)
+#define LIB_CRASH_REGISTER_IMAGE_SIZE UINT32_C(24)
 
 /* Keep these plain decimal tokens so the naked assembly handlers can use them. */
 #define LIB_CRASH_REASON_CODE_NONE 0
@@ -44,10 +45,24 @@ typedef struct {
     uint32_t integrity_crc32;
 } lib_crash_record_t;
 
+/* Validated, host-endian fields suitable for an application snapshot. */
+typedef struct {
+    lib_crash_reason_t reason;
+    uint32_t sequence;
+    uint32_t reset_cause;
+    uint32_t exception_number;
+    uint32_t stacked_pc;
+    uint32_t stacked_xpsr;
+} lib_crash_snapshot_t;
+
 bool lib_crash_is_valid(const lib_crash_record_t *record);
 bool lib_crash_has_fault(const lib_crash_record_t *record);
 lib_crash_reason_t lib_crash_reason(const lib_crash_record_t *record);
 uint32_t lib_crash_exception_number(const lib_crash_record_t *record);
+bool lib_crash_decode(const lib_crash_record_t *record, lib_crash_snapshot_t *snapshot);
+/* Writes the documented diagnostics-page image in big-endian byte order. */
+bool lib_crash_write_register_image(const lib_crash_record_t *record, uint8_t *bytes,
+                                    uint32_t length);
 void lib_crash_note_boot(lib_crash_record_t *record, uint32_t reset_cause);
 void lib_crash_capture(lib_crash_record_t *record, lib_crash_reason_t reason,
                        uint32_t exception_number, uint32_t stacked_pc,

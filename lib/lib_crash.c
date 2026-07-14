@@ -56,6 +56,20 @@ static uint32_t lib_crash_pack_reason(lib_crash_reason_t reason,
            ((uint32_t)reason & LIB_CRASH_REASON_CODE_MASK);
 }
 
+static bool lib_crash_reason_code_is_valid(uint32_t reason_code) {
+    return (reason_code == (uint32_t)LIB_CRASH_REASON_NONE) ||
+           (reason_code == (uint32_t)LIB_CRASH_REASON_NMI) ||
+           (reason_code == (uint32_t)LIB_CRASH_REASON_HARDFAULT) ||
+           (reason_code == (uint32_t)LIB_CRASH_REASON_UNEXPECTED_EXCEPTION);
+}
+
+static void lib_crash_write_u32_be(uint8_t *bytes, uint32_t value) {
+    bytes[0] = (uint8_t)(value >> 24U);
+    bytes[1] = (uint8_t)(value >> 16U);
+    bytes[2] = (uint8_t)(value >> 8U);
+    bytes[3] = (uint8_t)value;
+}
+
 bool lib_crash_is_valid(const lib_crash_record_t *record) {
     if ((record == NULL) || (record->magic != LIB_CRASH_MAGIC) ||
         (record->format_version != LIB_CRASH_FORMAT_VERSION) ||
@@ -63,7 +77,9 @@ bool lib_crash_is_valid(const lib_crash_record_t *record) {
         return false;
     }
 
-    return record->integrity_crc32 == lib_crash_crc32(record);
+    return lib_crash_reason_code_is_valid(record->reason &
+                                          LIB_CRASH_REASON_CODE_MASK) &&
+           (record->integrity_crc32 == lib_crash_crc32(record));
 }
 
 bool lib_crash_has_fault(const lib_crash_record_t *record) {
@@ -84,6 +100,55 @@ uint32_t lib_crash_exception_number(const lib_crash_record_t *record) {
     }
 
     return record->reason >> LIB_CRASH_EXCEPTION_NUMBER_SHIFT;
+}
+
+bool lib_crash_decode(const lib_crash_record_t *record,
+                      lib_crash_snapshot_t *snapshot) {
+    if (snapshot == NULL) {
+        return false;
+    }
+
+    *snapshot = (lib_crash_snapshot_t){0};
+    if (!lib_crash_is_valid(record)) {
+        return false;
+    }
+
+    snapshot->reason =
+        (lib_crash_reason_t)(record->reason & LIB_CRASH_REASON_CODE_MASK);
+    snapshot->sequence = record->sequence;
+    snapshot->reset_cause = record->reset_cause;
+    snapshot->exception_number = record->reason >> LIB_CRASH_EXCEPTION_NUMBER_SHIFT;
+    snapshot->stacked_pc = record->stacked_pc;
+    snapshot->stacked_xpsr = record->stacked_xpsr;
+    return true;
+}
+
+bool lib_crash_write_register_image(const lib_crash_record_t *record, uint8_t *bytes,
+                                    uint32_t length) {
+    lib_crash_snapshot_t snapshot;
+    uint32_t index;
+
+    if ((bytes == NULL) || (length < LIB_CRASH_REGISTER_IMAGE_SIZE)) {
+        return false;
+    }
+
+    for (index = 0U; index < LIB_CRASH_REGISTER_IMAGE_SIZE; ++index) {
+        bytes[index] = 0U;
+    }
+    if (!lib_crash_decode(record, &snapshot)) {
+        return false;
+    }
+
+    bytes[0] = UINT8_C(1);
+    bytes[1] = (uint8_t)snapshot.reason;
+    bytes[2] = (uint8_t)(LIB_CRASH_FORMAT_VERSION >> 8U);
+    bytes[3] = (uint8_t)LIB_CRASH_FORMAT_VERSION;
+    lib_crash_write_u32_be(&bytes[4], snapshot.sequence);
+    lib_crash_write_u32_be(&bytes[8], snapshot.reset_cause);
+    lib_crash_write_u32_be(&bytes[12], snapshot.exception_number);
+    lib_crash_write_u32_be(&bytes[16], snapshot.stacked_pc);
+    lib_crash_write_u32_be(&bytes[20], snapshot.stacked_xpsr);
+    return true;
 }
 
 void lib_crash_note_boot(lib_crash_record_t *record, uint32_t reset_cause) {
@@ -117,6 +182,10 @@ void lib_crash_capture(lib_crash_record_t *record, lib_crash_reason_t reason,
     lib_crash_clear_record(record);
     record->sequence = sequence + UINT32_C(1);
     record->reset_cause = reset_cause;
+    if ((reason == LIB_CRASH_REASON_NONE) ||
+        !lib_crash_reason_code_is_valid((uint32_t)reason)) {
+        reason = LIB_CRASH_REASON_UNEXPECTED_EXCEPTION;
+    }
     record->reason = lib_crash_pack_reason(reason, exception_number);
     record->stacked_pc = stacked_pc;
     record->stacked_xpsr = stacked_xpsr;

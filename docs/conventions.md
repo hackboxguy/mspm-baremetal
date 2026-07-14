@@ -31,9 +31,10 @@
   ELF-programmed target does not write the gap. The exact format and
   read-back procedure are in [image_identity.md](image_identity.md).
 - `lib_crash` records a packed reason code and the active exception number.
-  Its format is CRC-gated and has no public clear/acknowledge operation yet;
-  Phase 2 must define crash-page read-and-acknowledge ownership and reset
-  semantics before exposing it through a register map.
+  Its format is CRC-gated. `lib_crash_write_register_image()` safely encodes a
+  validated record for a read-only snapshot page; it has no public
+  clear/acknowledge operation. Phase 2 must define owner and reset semantics
+  before adding any writable crash-page field.
 
 ## Interrupts and concurrency
 
@@ -54,6 +55,14 @@
   overflow accounting; the consumer exclusively calls `try_pop`. Its compiler
   fences are sufficient only for one Cortex-M core and its interrupts, not DMA
   or multi-core sharing. A diagnostic may read a stale dropped-count snapshot.
+- `lib_regmap` uses a 16-bit EEPROM-style pointer. Its page snapshots are
+  acquired on the first byte of each I2C read transaction and released on the
+  transaction boundary; the producer publishes a new snapshot only when its
+  inactive buffer has no active reader. I2C-to-main command delivery is an
+  ordered SPSC queue: the I2C ISR is its producer and the main loop is its
+  consumer. No register-map callback runs application command work in an ISR.
+  The full wire and snapshot contract is in
+  [i2c_register_map.md](i2c_register_map.md).
 - `lib_debug` is the only application/driver debug-output path. It is
   register-free and delegates to a board-installed byte-writer callback. Use
   `DBG_WRITE_LITERAL` or `DBG_WRITE_BYTES`; both compile to no runtime work in
