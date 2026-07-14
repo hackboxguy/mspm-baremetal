@@ -21,6 +21,9 @@
 #define BOARD_BLINK_FALLBACK_PERIOD_MS UINT32_C(125)
 #define BOARD_UART_BACKCHANNEL_BAUD UINT32_C(115200)
 #define BOARD_I2C_REGMAP_TARGET_ADDRESS UINT8_C(0x42)
+#define BOARD_I2C_CONTROLLER_BUS_HZ UINT32_C(100000)
+#define BOARD_I2C_CONTROLLER_POLL_LIMIT UINT32_C(32000)
+#define BOARD_I2C_CONTROLLER_SCL_LOW_TIMEOUT_COUNT UINT8_C(32)
 
 typedef enum {
     BOARD_INIT_OK,
@@ -36,5 +39,6 @@ void board_led_red_toggle(void);
 uint32_t board_uart_backchannel_dropped_count(void);
 bool board_crash_has_fault(void);
 bool board_i2c1_target_init(lib_regmap_t *regmap);
+bool board_i2c1_controller_init(void);
 
 #endif

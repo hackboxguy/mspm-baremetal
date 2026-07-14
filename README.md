@@ -16,6 +16,10 @@ and safe crash-record encoder are complete. The 115200-baud banner, lossless
 burst, and overflow-counter evidence has passed. WWDT0 reset, retained
 reset-cause capture, a deliberate HardFault, and clean image-identity readback
 are bench-verified; power-cycle retention remains to be checked.
+The first I2C target acceptance is also bench-proven against a Raspberry Pi
+fixture. The bounded polled I2C controller backend has passed a safe
+write/read/repeated-start-read acceptance on a 3.3 V PCF8574-compatible
+module; see [the I2C controller fixture guide](docs/i2c_controller_pcf8574a.md).
 
 ## Prerequisites
 

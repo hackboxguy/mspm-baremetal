@@ -3,6 +3,7 @@
 #include "device.h"
 #include "hal_clock.h"
 #include "hal_gpio.h"
+#include "hal_i2c_controller.h"
 #include "hal_i2c_target.h"
 #include "hal_uart.h"
 #include "lib_crash.h"
@@ -36,6 +37,17 @@ static const hal_i2c_target_config_t g_i2c1_target = {
     .sda_pincm_index = IOMUX_PINCM12,
     .sda_pincm_function = IOMUX_PINCM12_PF_I2C1_SDA,
     .own_address = BOARD_I2C_REGMAP_TARGET_ADDRESS,
+};
+
+static const hal_i2c_controller_config_t g_i2c1_controller = {
+    .instance_base = I2C1_BASE,
+    .scl_pincm_index = IOMUX_PINCM11,
+    .scl_pincm_function = IOMUX_PINCM11_PF_I2C1_SCL,
+    .sda_pincm_index = IOMUX_PINCM12,
+    .sda_pincm_function = IOMUX_PINCM12_PF_I2C1_SDA,
+    .bus_hz = BOARD_I2C_CONTROLLER_BUS_HZ,
+    .poll_limit = BOARD_I2C_CONTROLLER_POLL_LIMIT,
+    .scl_low_timeout_count = BOARD_I2C_CONTROLLER_SCL_LOW_TIMEOUT_COUNT,
 };
 
 #if defined(DEBUG_ENABLED)
@@ -94,4 +106,11 @@ bool board_crash_has_fault(void) {
 
 bool board_i2c1_target_init(lib_regmap_t *regmap) {
     return hal_i2c_target_init(&g_i2c1_target, regmap);
+}
+
+bool board_i2c1_controller_init(void) {
+    hal_i2c_controller_config_t config = g_i2c1_controller;
+
+    config.input_clock_hz = hal_clock_mclk_hz();
+    return hal_i2c_controller_init(&config);
 }

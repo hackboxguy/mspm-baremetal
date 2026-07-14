@@ -30,10 +30,18 @@ footprints are DNC. The I2C1 target backend and `i2c_regmap_demo` now build,
 with a host-tested register-free transaction engine and explicit C1106 errata
 handling: manual ACK plus delayed `SRXDONE` receive, `STXEMPTY` only for a
 transmit request, disabled target wakeup, and no `ACTIVE` toggle during
-recovery. The source-defined initial fixture is a 3.3 V, 100 kHz controller at
-address `0x42`; it remains unbench-tested and is not a supported field
-interface. `hal_i2c_controller` remains deferred. See
-`docs/i2c_register_map.md` for the contract and pending bus acceptance.
+recovery. The 3.3 V, 100 kHz Raspberry Pi fixture at address `0x42` is
+bench-proven for positive target read, repeated-start, and current-address
+behavior; negative/recovery tests remain open. An initial polling
+`hal_i2c_controller` now owns the same I2C1 PB2/PB3 pair in a separate app,
+supports up to four-byte write, read, and combined write/repeated-start/read
+operations, and has bounded software plus peripheral SCL-low timeout handling.
+`pcf8574a_demo` uses a single 3.3 V PCF8574-compatible module as its safe HIL
+fixture, writing only `0xFF` before reading. It has bench-proven write, read,
+and repeated-start-read at `0x20`; the non-A address is recorded because the
+connected module did not answer in the PCF8574A range. See
+`docs/i2c_register_map.md` and `docs/i2c_controller_pcf8574a.md` for the
+respective contracts.
 
 ## Commands
 

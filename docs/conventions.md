@@ -48,12 +48,17 @@
   priority 2 or share this queue without a new concurrency design. UART IMASK
   updates use a short PRIMASK critical section so future RX/error mask bits
   cannot be lost to a thread/ISR read-modify-write race.
-  I2C1 owns the target transaction engine at priority 1. It is the
+  The `i2c_regmap_demo` build assigns I2C1 to the target transaction engine at
+  priority 1. It is the
   `lib_regmap` snapshot reader and queued-command producer; the main loop is
   the snapshot publisher and queued-command consumer. It neither executes a
   command callback nor changes a page snapshot in the ISR. Before enabling a
   further interrupt, document its priority, nesting relationship, and every
   producer/consumer pair here.
+- `pcf8574a_demo` instead owns I2C1 as a polling controller: it enables no
+  I2C1 interrupt and never starts the target backend. An application selects
+  exactly one I2C1 personality; target and controller use of the same instance
+  are not concurrent.
 - `lib_ringbuf` is a fixed-storage, byte-oriented SPSC primitive. Its capacity
   is a non-zero power of two; it uses every slot and monotonically advancing
   32-bit masked indices. The producer exclusively calls `try_push` and owns
