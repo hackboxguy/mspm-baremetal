@@ -44,6 +44,9 @@ SECTIONS
     {
         __data_start = .;
         *(.data .data.*)
+        /* Keep a FLASH-backed byte even when the application has no .data. */
+        __data_lma_anchor = .;
+        BYTE(0);
         . = ALIGN(4);
         __data_end = .;
     } > SRAM AT > FLASH
@@ -85,6 +88,10 @@ SECTIONS
 
 ASSERT((LOADADDR(.data) + SIZEOF(.data)) <= __image_identity_start,
        "Flash image overlaps the reserved image identity block")
+ASSERT(LOADADDR(.data) >= ORIGIN(FLASH),
+       "Data load image must remain in MAIN flash")
+ASSERT(SIZEOF(.data) > 0,
+       "Data load anchor must keep the data image out of SRAM")
 ASSERT(ADDR(.isr_vector) == ORIGIN(FLASH),
        "Vector table must start at the beginning of MAIN flash")
 ASSERT(__noinit_end <= __stack_limit, "SRAM image overlaps the reserved stack")

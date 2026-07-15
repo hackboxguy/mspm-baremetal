@@ -60,4 +60,6 @@ The current backend limits each write and read portion to four bytes. It
 enables the peripheral SCL-low timeout and has a separate bounded polling
 ceiling. It reports a low SDA line before START rather than clocking GPIO
 recovery pulses; correct the fixture power/wiring or remove the target before
-retrying.
+retrying. This is deliberately not a claim of recovery: a board-owned
+GPIO-remux 9-clock recovery helper and its HIL test remain required for the
+Phase 2 stuck-bus gate.

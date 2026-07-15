@@ -28,11 +28,13 @@ test in CI whenever portable code changes. The C1106 target pin pair is I2C1
 PB2/PB3, exposed at BoosterPack positions 9/10; the board's I2C pull-up
 footprints are DNC. The I2C1 target backend and `i2c_regmap_demo` now build,
 with a host-tested register-free transaction engine and explicit C1106 errata
-handling: manual ACK plus delayed `SRXDONE` receive, `STXEMPTY` only for a
-transmit request, disabled target wakeup, and no `ACTIVE` toggle during
-recovery. The 3.3 V, 100 kHz Raspberry Pi fixture at address `0x42` is
+handling: automatic ACK plus delayed `SRXDONE` receive, `STXEMPTY` only for a
+transmit request, disabled target wakeup, no `ACTIVE` toggle during recovery,
+and a configured target SCL-low Timeout A. The 3.3 V, 100 kHz Raspberry Pi
+fixture at address `0x42` is
 bench-proven for positive target read, repeated-start, and current-address
-behavior; negative/recovery tests remain open. An initial polling
+behavior; the enabled timeout and other negative/recovery tests remain open.
+An initial polling
 `hal_i2c_controller` now owns the same I2C1 PB2/PB3 pair in a separate app,
 supports up to four-byte write, read, and combined write/repeated-start/read
 operations, and has bounded software plus peripheral SCL-low timeout handling.
@@ -42,6 +44,11 @@ and repeated-start-read at `0x20`; the non-A address is recorded because the
 connected module did not answer in the PCF8574A range. See
 `docs/i2c_register_map.md` and `docs/i2c_controller_pcf8574a.md` for the
 respective contracts.
+
+CI discovers every `app/*/` directory and runs both image variants through
+`identity-check`; an app cannot be omitted from artifact validation by a
+hand-maintained list. The first target control-page write/readback remains the
+next functional Phase 2 slice.
 
 ## Commands
 

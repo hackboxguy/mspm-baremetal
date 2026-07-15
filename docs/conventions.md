@@ -58,7 +58,8 @@
 - `pcf8574a_demo` instead owns I2C1 as a polling controller: it enables no
   I2C1 interrupt and never starts the target backend. An application selects
   exactly one I2C1 personality; target and controller use of the same instance
-  are not concurrent.
+  are not concurrent. The board wrapper enforces this once-only claim at
+  runtime and returns `false` if either personality was already initialized.
 - `lib_ringbuf` is a fixed-storage, byte-oriented SPSC primitive. Its capacity
   is a non-zero power of two; it uses every slot and monotonically advancing
   32-bit masked indices. The producer exclusively calls `try_push` and owns

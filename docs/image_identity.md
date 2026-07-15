@@ -11,6 +11,11 @@ programs it, and `make identity-check` compares all three artifacts. The tool
 uses only Python's standard library and validates the ELF32 load segments,
 linker symbols, Intel HEX checksums, and the serialized erased gap.
 
+The linker includes a zero data-load anchor in `.data`, ensuring that the
+section has a real MAIN-flash load address even when an application has no
+initialized globals. Its four-byte aligned allocation prevents GNU `objcopy`
+from treating SRAM as the end of a flat binary image.
+
 ## Format version 1
 
 All multibyte fields are little-endian. The `VERSION` command-line value is

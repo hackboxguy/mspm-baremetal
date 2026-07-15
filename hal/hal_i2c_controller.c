@@ -132,6 +132,7 @@ static hal_i2c_controller_result_t hal_i2c_controller_wait_for_completion(void) 
         }
     }
 
+    /* Polling-only owner: no ISR or second context modifies MCTR. */
     g_i2c->MASTER.MCTR |= I2C_MCTR_STOP_ENABLE;
     return HAL_I2C_CONTROLLER_TIMEOUT;
 }
@@ -225,6 +226,7 @@ bool hal_i2c_controller_init(const hal_i2c_controller_config_t *config) {
     g_i2c->CPU_INT.IMASK = 0U;
     hal_i2c_controller_clear_events();
     g_i2c->MASTER.MCR = I2C_MCR_CLKSTRETCH_ENABLE;
+    /* I2C1 is board-claimed, so no target/ISR can race this initialization RMW. */
     g_i2c->MASTER.MCR |= I2C_MCR_ACTIVE_ENABLE;
     /* Let BUSBSY observe an external controller before the first MCTR write. */
     hal_i2c_controller_delay(g_activation_delay_nops);

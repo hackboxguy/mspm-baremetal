@@ -14,7 +14,10 @@ typedef struct {
     uint32_t scl_pincm_function;
     uint32_t sda_pincm_index;
     uint32_t sda_pincm_function;
+    uint32_t input_clock_hz;
+    uint32_t bus_hz;
     uint8_t own_address;
+    uint8_t scl_low_timeout_count;
 } hal_i2c_target_config_t;
 
 /*
@@ -23,5 +26,6 @@ typedef struct {
  */
 bool hal_i2c_target_init(const hal_i2c_target_config_t *config, lib_regmap_t *regmap);
 uint32_t hal_i2c_target_error_count(void);
+uint32_t hal_i2c_target_unexpected_event_count(void);
 
 #endif

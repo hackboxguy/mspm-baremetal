@@ -19,6 +19,7 @@ static const hal_gpio_output_t g_red_led = {
 
 static uint8_t g_uart_tx_storage[BOARD_UART_TX_QUEUE_CAPACITY];
 static lib_ringbuf_t g_uart_tx_queue;
+static bool g_i2c1_claimed;
 
 extern lib_crash_record_t g_crash_record;
 
@@ -37,6 +38,8 @@ static const hal_i2c_target_config_t g_i2c1_target = {
     .sda_pincm_index = IOMUX_PINCM12,
     .sda_pincm_function = IOMUX_PINCM12_PF_I2C1_SDA,
     .own_address = BOARD_I2C_REGMAP_TARGET_ADDRESS,
+    .bus_hz = BOARD_I2C_TARGET_BUS_HZ,
+    .scl_low_timeout_count = BOARD_I2C_TARGET_SCL_LOW_TIMEOUT_COUNT,
 };
 
 static const hal_i2c_controller_config_t g_i2c1_controller = {
@@ -104,13 +107,44 @@ bool board_crash_has_fault(void) {
     return lib_crash_has_fault(&g_crash_record);
 }
 
+/* I2C1 personality selection occurs from application initialization only. */
+static bool board_i2c1_claim(void) {
+    if (g_i2c1_claimed) {
+        return false;
+    }
+
+    g_i2c1_claimed = true;
+    return true;
+}
+
 bool board_i2c1_target_init(lib_regmap_t *regmap) {
-    return hal_i2c_target_init(&g_i2c1_target, regmap);
+    hal_i2c_target_config_t config = g_i2c1_target;
+
+    if (!board_i2c1_claim()) {
+        return false;
+    }
+
+    config.input_clock_hz = hal_clock_mclk_hz();
+    if (hal_i2c_target_init(&config, regmap)) {
+        return true;
+    }
+
+    g_i2c1_claimed = false;
+    return false;
 }
 
 bool board_i2c1_controller_init(void) {
     hal_i2c_controller_config_t config = g_i2c1_controller;
 
+    if (!board_i2c1_claim()) {
+        return false;
+    }
+
     config.input_clock_hz = hal_clock_mclk_hz();
-    return hal_i2c_controller_init(&config);
+    if (hal_i2c_controller_init(&config)) {
+        return true;
+    }
+
+    g_i2c1_claimed = false;
+    return false;
 }

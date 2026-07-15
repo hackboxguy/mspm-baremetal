@@ -322,7 +322,10 @@ is ported.
 - A single instanced `hal_i2c_controller` driver, initially supporting the
   sequence needed by the first application: write, read, and repeated-start
   write-read with explicit timeout and error results, including documented
-  stuck-SDA recovery and SCL-low/clock-stretch timeout behaviour.
+  stuck-SDA recovery and SCL-low/clock-stretch timeout behaviour. The initial
+  fixture backend may report a low SDA without pulsing the bus, but that is not
+  a recovery substitute: a board-owned GPIO-remux 9-clock recovery procedure
+  and its HIL evidence remain required before this phase gate is accepted.
 - The first I2C target configuration in `i2c_regmap_demo`, with a board-defined
   address and standard device-info/debug pages.  Keep board initialization and
   target ownership separate so a future board can use another instance.

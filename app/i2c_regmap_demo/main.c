@@ -11,9 +11,10 @@
 #include "lib_debug.h"
 #include "lib_regmap.h"
 
-#define I2C_REGMAP_DEMO_STATUS_SIZE UINT16_C(8)
+#define I2C_REGMAP_DEMO_STATUS_SIZE UINT16_C(12)
 #define I2C_REGMAP_DEMO_STATUS_ERROR_COUNT_OFFSET UINT16_C(0)
 #define I2C_REGMAP_DEMO_STATUS_PUBLISH_REJECTED_OFFSET UINT16_C(4)
+#define I2C_REGMAP_DEMO_STATUS_UNEXPECTED_EVENT_OFFSET UINT16_C(8)
 
 extern lib_crash_record_t g_crash_record;
 
@@ -26,6 +27,10 @@ static uint8_t g_crash_one[LIB_CRASH_REGISTER_IMAGE_SIZE];
 static lib_regmap_snapshot_t g_device_info_snapshot;
 static lib_regmap_snapshot_t g_status_snapshot;
 static lib_regmap_snapshot_t g_crash_snapshot;
+static uint32_t g_status_last_error_count;
+static uint32_t g_status_last_publish_rejected_count;
+static uint32_t g_status_last_unexpected_event_count;
+static bool g_status_published;
 
 static const lib_regmap_page_t g_pages[] = {
     {
@@ -90,14 +95,30 @@ static bool i2c_regmap_demo_init(void) {
 
 static void i2c_regmap_demo_publish_status(void) {
     uint8_t status[I2C_REGMAP_DEMO_STATUS_SIZE] = {0};
+    const uint32_t error_count = hal_i2c_target_error_count();
+    const uint32_t publish_rejected_count =
+        lib_regmap_snapshot_publish_rejected_count(&g_status_snapshot);
+    const uint32_t unexpected_event_count = hal_i2c_target_unexpected_event_count();
+
+    if (g_status_published && (error_count == g_status_last_error_count) &&
+        (publish_rejected_count == g_status_last_publish_rejected_count) &&
+        (unexpected_event_count == g_status_last_unexpected_event_count)) {
+        return;
+    }
 
     i2c_regmap_demo_write_u32_be(status, I2C_REGMAP_DEMO_STATUS_ERROR_COUNT_OFFSET,
-                                 hal_i2c_target_error_count());
-    i2c_regmap_demo_write_u32_be(
-        status, I2C_REGMAP_DEMO_STATUS_PUBLISH_REJECTED_OFFSET,
-        lib_regmap_snapshot_publish_rejected_count(&g_status_snapshot));
-    (void)lib_regmap_snapshot_publish(&g_status_snapshot, status,
-                                      (uint16_t)sizeof(status));
+                                 error_count);
+    i2c_regmap_demo_write_u32_be(status, I2C_REGMAP_DEMO_STATUS_PUBLISH_REJECTED_OFFSET,
+                                 publish_rejected_count);
+    i2c_regmap_demo_write_u32_be(status, I2C_REGMAP_DEMO_STATUS_UNEXPECTED_EVENT_OFFSET,
+                                 unexpected_event_count);
+    if (lib_regmap_snapshot_publish(&g_status_snapshot, status,
+                                    (uint16_t)sizeof(status))) {
+        g_status_last_error_count = error_count;
+        g_status_last_publish_rejected_count = publish_rejected_count;
+        g_status_last_unexpected_event_count = unexpected_event_count;
+        g_status_published = true;
+    }
 }
 
 static void i2c_regmap_demo_fail(void) {

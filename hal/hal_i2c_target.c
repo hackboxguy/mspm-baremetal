@@ -9,31 +9,46 @@
 #define HAL_I2C_TARGET_PINCM_COUNT UINT32_C(251)
 #define HAL_I2C_TARGET_PRIORITY UINT32_C(1)
 #define HAL_I2C_TARGET_ERRATA_RXDONE_NOPS UINT32_C(2)
+#define HAL_I2C_TARGET_TIMING_DENOMINATOR UINT32_C(10)
 
 #define HAL_I2C_TARGET_INTERRUPT_MASK                                                  \
     (I2C_CPU_INT_IMASK_SRXDONE_SET | I2C_CPU_INT_IMASK_STXDONE_SET |                   \
      I2C_CPU_INT_IMASK_STXEMPTY_SET | I2C_CPU_INT_IMASK_SSTART_SET |                   \
      I2C_CPU_INT_IMASK_SSTOP_SET | I2C_CPU_INT_IMASK_TIMEOUTA_SET |                    \
-     I2C_CPU_INT_IMASK_TIMEOUTB_SET | I2C_CPU_INT_IMASK_STX_UNFL_SET |                 \
-     I2C_CPU_INT_IMASK_SRX_OVFL_SET | I2C_CPU_INT_IMASK_SARBLOST_SET |                 \
-     I2C_CPU_INT_IMASK_INTR_OVFL_SET)
+     I2C_CPU_INT_IMASK_STX_UNFL_SET | I2C_CPU_INT_IMASK_SRX_OVFL_SET |                 \
+     I2C_CPU_INT_IMASK_SARBLOST_SET | I2C_CPU_INT_IMASK_INTR_OVFL_SET)
 
 static I2C_Regs *g_i2c;
 static hal_i2c_target_engine_t g_engine;
 static volatile uint32_t g_error_count;
+static volatile uint32_t g_unexpected_event_count;
 static bool g_initialized;
 static bool g_start_prehandled;
 
 static bool hal_i2c_target_config_is_valid(const hal_i2c_target_config_t *config,
                                            const lib_regmap_t *regmap) {
-    return (config != NULL) && (regmap != NULL) &&
-           (config->instance_base == I2C1_BASE) &&
-           (config->interrupt_number == (int32_t)I2C1_INT_IRQn) &&
-           (config->own_address <= UINT8_C(0x7f)) &&
-           (config->scl_pincm_index < HAL_I2C_TARGET_PINCM_COUNT) &&
-           (config->sda_pincm_index < HAL_I2C_TARGET_PINCM_COUNT) &&
-           ((config->scl_pincm_function & ~IOMUX_PINCM_PF_MASK) == 0U) &&
-           ((config->sda_pincm_function & ~IOMUX_PINCM_PF_MASK) == 0U);
+    uint32_t denominator;
+    uint32_t timer_divider;
+
+    if ((config == NULL) || (regmap == NULL)) {
+        return false;
+    }
+
+    denominator = HAL_I2C_TARGET_TIMING_DENOMINATOR * config->bus_hz;
+    if ((config->instance_base != I2C1_BASE) ||
+        (config->interrupt_number != (int32_t)I2C1_INT_IRQn) ||
+        (config->own_address > UINT8_C(0x7f)) ||
+        (config->scl_pincm_index >= HAL_I2C_TARGET_PINCM_COUNT) ||
+        (config->sda_pincm_index >= HAL_I2C_TARGET_PINCM_COUNT) ||
+        ((config->scl_pincm_function & ~IOMUX_PINCM_PF_MASK) != 0U) ||
+        ((config->sda_pincm_function & ~IOMUX_PINCM_PF_MASK) != 0U) ||
+        (config->bus_hz == 0U) || (config->scl_low_timeout_count <= UINT8_C(1)) ||
+        (denominator == 0U) || ((config->input_clock_hz % denominator) != 0U)) {
+        return false;
+    }
+
+    timer_divider = config->input_clock_hz / denominator;
+    return (timer_divider > 0U) && (timer_divider <= UINT32_C(128));
 }
 
 static void hal_i2c_target_handle_start(void) {
@@ -89,13 +104,18 @@ static void hal_i2c_target_abort(void) {
 }
 
 bool hal_i2c_target_init(const hal_i2c_target_config_t *config, lib_regmap_t *regmap) {
+    uint32_t timer_divider;
+
     if (g_initialized || !hal_i2c_target_config_is_valid(config, regmap) ||
         !hal_i2c_target_engine_init(&g_engine, regmap)) {
         return false;
     }
 
+    timer_divider =
+        config->input_clock_hz / (HAL_I2C_TARGET_TIMING_DENOMINATOR * config->bus_hz);
     g_i2c = (I2C_Regs *)config->instance_base;
     g_error_count = 0U;
+    g_unexpected_event_count = 0U;
     g_start_prehandled = false;
 
     g_i2c->GPRCM.RSTCTL = I2C_RSTCTL_KEY_UNLOCK_W | I2C_RSTCTL_RESETSTKYCLR_CLR |
@@ -112,6 +132,10 @@ bool hal_i2c_target_init(const hal_i2c_target_config_t *config, lib_regmap_t *re
 
     g_i2c->CLKSEL = I2C_CLKSEL_BUSCLK_SEL_ENABLE;
     g_i2c->CLKDIV = I2C_CLKDIV_RATIO_DIV_BY_1;
+    g_i2c->MASTER.MTPR = timer_divider - 1U;
+    /* Timeout A is the documented target-side SCL-low hang escape. */
+    g_i2c->TIMEOUT_CTL =
+        (uint32_t)config->scl_low_timeout_count | I2C_TIMEOUT_CTL_TCNTAEN_ENABLE;
     g_i2c->SLAVE.SOAR =
         (uint32_t)config->own_address | I2C_SOAR_OAREN_ENABLE | I2C_SOAR_SMODE_MODE7;
     g_i2c->SLAVE.SOAR2 = I2C_SOAR2_OAR2EN_DISABLE;
@@ -138,6 +162,10 @@ bool hal_i2c_target_init(const hal_i2c_target_config_t *config, lib_regmap_t *re
 
 uint32_t hal_i2c_target_error_count(void) {
     return g_initialized ? g_error_count : 0U;
+}
+
+uint32_t hal_i2c_target_unexpected_event_count(void) {
+    return g_initialized ? g_unexpected_event_count : 0U;
 }
 
 void I2C1_IRQHandler(void) {
@@ -175,7 +203,6 @@ void I2C1_IRQHandler(void) {
             g_start_prehandled = false;
             break;
         case I2C_CPU_INT_IIDX_STAT_TIMEOUTA:
-        case I2C_CPU_INT_IIDX_STAT_TIMEOUTB:
         case I2C_CPU_INT_IIDX_STAT_STX_UNFL:
         case I2C_CPU_INT_IIDX_STAT_SRX_OVFL:
         case I2C_CPU_INT_IIDX_STAT_SARBLOST:
@@ -183,6 +210,7 @@ void I2C1_IRQHandler(void) {
             hal_i2c_target_abort();
             break;
         default:
+            ++g_unexpected_event_count;
             hal_i2c_target_abort();
             break;
         }

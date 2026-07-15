@@ -97,7 +97,7 @@ timestamp was supplied by the release pipeline. The platform never uses
 `__DATE__` or `__TIME__`, so identical inputs do not acquire an accidental
 timestamp.
 
-### `i2c_regmap_demo` target status (`0x0300-0x0307`)
+### `i2c_regmap_demo` target status (`0x0300-0x030B`)
 
 The initial C1106 target demo uses this read-only debug subset. It is a demo
 diagnostic page, not a product command interface.
@@ -106,12 +106,16 @@ diagnostic page, not a product command interface.
 |---:|---|---|
 | `0x0300-0x0303` | target transport error count | unsigned 32-bit big-endian |
 | `0x0304-0x0307` | status-page publish-rejected count | unsigned 32-bit big-endian |
+| `0x0308-0x030B` | unexpected I2C interrupt-event count | unsigned 32-bit big-endian |
 
-The error count covers target timeout, FIFO underflow/overflow,
-arbitration-loss, interrupt-overflow, and impossible software/hardware state
-events. It does not make a bus recovery claim: after an error the target drops
-its software transaction state and waits for the controller to terminate with
-STOP before a new transaction.
+The transport-error count covers enabled target timeout, FIFO
+underflow/overflow, arbitration-loss, and interrupt-overflow. The separate
+unexpected-event count distinguishes an enabled or future I2C event the driver
+does not recognize; it also aborts the transaction. This diagnostic does not
+make a bus recovery claim: after an error the target drops its software
+transaction state and waits for the controller to terminate with STOP before a
+new transaction. Status snapshots publish initially and on value change; a
+rejected publish is retried on a later main-loop pass.
 
 ### Crash record (`0x0400-0x0417`)
 
@@ -167,12 +171,17 @@ read snapshot. It uses automatic receive ACKs and waits two module clocks after
 `SRXDONE` before reading RX data (I2C_ERR_08); target-transmit bytes are paced
 by the hardware `TREQ` state. It never toggles target `ACTIVE` after
 initialization (I2C_ERR_05), has no low-power target wakeup (`SWUEN` is
-disabled for I2C_ERR_04), and requires controller transfers at 100 kHz or
-above with a terminating STOP (I2C_ERR_09/10).
+disabled for I2C_ERR_04), enables the documented target SCL-low Timeout A, and
+requires controller transfers at 100 kHz or above with a terminating STOP
+(I2C_ERR_09/10).
 
-`hal_i2c_controller` remains deferred. Before the target can be called
-supported, the documented external-master fixture must verify address
-write/read/repeated-start/current-address behavior, short/aborted
-transactions, error recovery, target reset mid-transfer, stuck-SDA recovery,
-SCL-low timeout behavior, pull-up value/location, bus voltage, controller
-tool version, and the declared 100 kHz bus speed.
+The polling `hal_i2c_controller` has separately passed its first physical
+PCF8574-compatible repeated-start transaction. Before either direction can be
+called supported, the documented external-master fixture must verify address
+write/read/repeated-start/current-address behavior, a queued control-page
+write/readback, short/aborted transactions, error recovery, target reset
+mid-transfer, stuck-SDA recovery, SCL-low timeout behavior, pull-up
+value/location, bus voltage, controller tool version, and the declared 100 kHz
+bus speed. The first controller deliberately reports a low SDA without GPIO
+pulses; the Phase 2 9-clock recovery requirement remains open and is not
+waived by that policy.
